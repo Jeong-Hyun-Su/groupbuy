@@ -11,6 +11,8 @@ import com.groupbuy.payment.domain.Payment
 import com.groupbuy.payment.domain.PaymentGatewayException
 import com.groupbuy.payment.domain.PaymentRepository
 import com.groupbuy.payment.domain.PaymentStatus
+import com.groupbuy.participation.application.ConfirmOutcome
+import com.groupbuy.payment.domain.RefundReason
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -31,6 +33,7 @@ class PaymentConfirmServiceTest {
     private lateinit var gateway: FakePaymentGateway
     private lateinit var orderQueryService: OrderQueryService
     private lateinit var participationConfirmService: ParticipationConfirmService
+    private lateinit var refundService: RefundService
     private lateinit var service: PaymentConfirmService
 
     @BeforeEach
@@ -39,6 +42,8 @@ class PaymentConfirmServiceTest {
         gateway = FakePaymentGateway()
         orderQueryService = mockk()
         participationConfirmService = mockk(relaxed = true)
+        every { participationConfirmService.confirmByOrder(any()) } returns ConfirmOutcome.CONFIRMED
+        refundService = mockk(relaxed = true)
         every { orderQueryService.getByOrderNo(orderNo) } returns
             OrderView(orderId = 7, orderNo = orderNo, userId = 42, dealId = 1, listAmount = listPrice, status = "READY")
 
@@ -48,7 +53,7 @@ class PaymentConfirmServiceTest {
             timeProvider = FixedTimeProvider(now),
             paymentGateway = gateway,
         )
-        service = PaymentConfirmService(payments, gateway, orderQueryService, recorder)
+        service = PaymentConfirmService(payments, gateway, orderQueryService, recorder, participationConfirmService, refundService)
     }
 
     private fun command(paymentKey: String = "pay_key_1", amount: Int = listPrice) =
@@ -103,6 +108,62 @@ class PaymentConfirmServiceTest {
 
         assertThat(gateway.approveCalls.get()).isZero()
         assertThat(payments.findByOrderNo(orderNo)).isNull()
+    }
+
+    @Test
+    fun `선점이 만료된 주문은 PG 승인을 호출하지 않는다 (ADR-07)`() {
+        every { participationConfirmService.ensureConfirmable(7) } throws DomainException(ErrorCode.RESERVATION_EXPIRED)
+
+        assertThatThrownBy { service.confirm(command()) }
+            .isInstanceOf(DomainException::class.java)
+            .extracting("errorCode").isEqualTo(ErrorCode.RESERVATION_EXPIRED)
+
+        assertThat(gateway.approveCalls.get()).isZero()
+        assertThat(payments.findByOrderNo(orderNo)).isNull()
+    }
+
+    @Test
+    fun `승인 직후 확정이 거부되면 승인 기록은 남기고 전액 환불한다 (R5)`() {
+        every { participationConfirmService.confirmByOrder(7) } returns ConfirmOutcome.REJECTED
+
+        assertThatThrownBy { service.confirm(command()) }.isInstanceOf(DomainException::class.java)
+
+        // 돈을 받은 기록이 있어야 환불할 수 있다 — 롤백으로 사라지면 안 된다
+        assertThat(payments.findByOrderNo(orderNo)!!.status).isEqualTo(PaymentStatus.APPROVED)
+        verify(exactly = 1) {
+            refundService.refund(RefundCommand(7, listPrice, RefundReason.DEAL_CLOSED_DURING_PAYMENT))
+        }
+    }
+
+    @Test
+    fun `승인 응답은 못 받았지만 PG 에는 승인돼 있으면 FAILED 가 아니라 APPROVED 로 반영한다`() {
+        gateway.approveFailure = PaymentGatewayException("TIMEOUT", "read timeout", retryable = true)
+        gateway.seedApproved(orderNo, "pay_key_1", listPrice)
+
+        val result = service.confirm(command())
+
+        assertThat(result.newlyApproved).isTrue()
+        assertThat(payments.findByOrderNo(orderNo)!!.status).isEqualTo(PaymentStatus.APPROVED)
+    }
+
+    @Test
+    fun `웹훅은 승인하지 않고 PG 조회 결과만 반영한다`() {
+        gateway.seedApproved(orderNo, "pay_key_1", listPrice)
+
+        val result = service.reconcile(orderNo)!!
+
+        assertThat(result.newlyApproved).isTrue()
+        assertThat(gateway.approveCalls.get()).isZero()
+        assertThat(payments.findByOrderNo(orderNo)!!.pgPaymentKey).isEqualTo("pay_key_1")
+        verify(exactly = 1) { participationConfirmService.confirmByOrder(7) }
+    }
+
+    @Test
+    fun `PG 에 승인된 결제가 없는 웹훅은 아무 일도 일으키지 않는다 — 위조 방어`() {
+        assertThat(service.reconcile(orderNo)).isNull()
+
+        assertThat(payments.findByOrderNo(orderNo)).isNull()
+        verify(exactly = 0) { participationConfirmService.confirmByOrder(any()) }
     }
 
     @Test

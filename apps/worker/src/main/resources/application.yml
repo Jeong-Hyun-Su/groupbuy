@@ -35,7 +35,6 @@ groupbuy:
     toss:
       base-url: https://api.tosspayments.com
       secret-key: ${TOSS_SECRET_KEY:test_sk_docs_and_sandbox_only}
-      webhook-secret: ${TOSS_WEBHOOK_SECRET:}
       connect-timeout: 3s
       read-timeout: 15s
 

@@ -98,6 +98,34 @@ class DealListApiTest {
     }
 
     @Test
+    fun `검색어 없이도 목록이 조회된다`() {
+        val marker = UUID.randomUUID().toString().take(8)
+        createOpenDeal("무키워드-$marker", closeInHours = 2)
+
+        // keyword 가 null 이면 PostgreSQL 이 바인딩 타입을 못 정해 `text ~~ bytea` 로 터졌었다
+        mockMvc.get("/api/deals") {
+            accept = MediaType.APPLICATION_JSON
+        }.andExpect {
+            status { isOk() }
+        }
+    }
+
+    @Test
+    fun `검색어의 와일드카드는 글자 그대로 취급한다`() {
+        val marker = UUID.randomUUID().toString().take(8)
+        createOpenDeal("와일드-$marker-정상", closeInHours = 2)
+
+        // '%' 를 이스케이프하지 않으면 전체 매칭이 되어 무관한 딜까지 걸린다
+        mockMvc.get("/api/deals") {
+            param("q", "%$marker%")
+            accept = MediaType.APPLICATION_JSON
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.totalCount") { value(0) }
+        }
+    }
+
+    @Test
     fun `페이지 크기는 상한을 넘지 않는다`() {
         mockMvc.get("/api/deals") {
             param("size", "9999")

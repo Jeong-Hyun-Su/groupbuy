@@ -18,10 +18,15 @@ import org.springframework.transaction.annotation.Transactional
  * `DealClosingOrchestrator` 와 분리한 이유는 트랜잭션 경계를 프록시가 열게 하기 위함이다.
  * 같은 클래스 안에서 `@Transactional` 메서드를 호출하면 프록시를 타지 않아 트랜잭션이 안 열린다.
  *
- * 환불이 하나라도 실패하면 예외가 올라가 판정까지 통째로 롤백된다.
+ * PG 호출이 실패하면(예외) 판정까지 통째로 롤백된다.
  * "돈이 안 맞느니 마감을 미룬다" 는 선택 — 부분 성공을 허용하면 일부만 환불된 채 SUCCEEDED 로 굳어
- * R4·R5 가 깨진다. 딜은 CLOSING 에서 되돌아가고 다음 폴링이 재시도한다.
+ * R4·R5 가 깨진다. 딜은 CLOSING 에 남고 다음 폴링이 재개한다 (`DealCommandService.beginClosing`).
+ * 롤백으로 refunds 행은 사라져도 PG 쪽 취소는 남는데, 재시도가 같은 Idempotency-Key 를 쓰므로 이중 환불은 없다 (R6).
+ *
+ * 예외가 아닌 실패(취소 불가 상태의 결제 = 데이터 이상)는 롤백하지 않는다. 재시도해도 결과가 같아서
+ * 한 건 때문에 나머지 전원의 환불이 영영 막히기 때문이다. 그 참여는 ADJUSTING/REFUNDING 에 남고 딜은 SETTLED 로 못 간다.
  */
+// ponytail: PG 가 길게 죽으면 5초마다 전원 환불을 재시도한다. Phase 3 에서 refunds 워커 + 지수 백오프 + MANUAL_REQUIRED 로 교체
 @Component
 class DealSettlementProcessor(
     private val dealCommandService: DealCommandService,

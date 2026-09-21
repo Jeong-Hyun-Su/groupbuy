@@ -55,7 +55,8 @@ class RefundService(
             ?: throw NotFoundException(ErrorCode.PAYMENT_NOT_FOUND, "주문의 결제를 찾을 수 없습니다: orderId=${command.orderId}")
 
         if (!payment.status.cancellable) {
-            log.warn("not cancellable: orderId={} status={}", command.orderId, payment.status)
+            // 재시도해도 결과가 같다 — 예외로 마감 전체를 막지 않고, 운영자가 볼 수 있게 크게 남긴다
+            log.error("refund skipped, payment not cancellable (수동 확인 필요): orderId={} status={}", command.orderId, payment.status)
             return RefundOutcome(command.orderId, null, command.amount, succeeded = false, error = "취소 가능한 결제가 아닙니다.")
         }
 
