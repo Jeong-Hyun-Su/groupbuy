@@ -1,0 +1,101 @@
+name: jira-executor
+
+# Jira 이슈가 Approved 로 전이되면 Jira Automation 이 repository_dispatch 를 쏜다.
+#
+# 이 워크플로는 트리거를 붙이기 전까지 절대 돌지 않는다 (repository_dispatch 전용).
+# 로드맵 5주차 항목이고, 착수 조건은 SCRUM-10 에서 CI 가 통합 테스트를 실제로 통과하는 것.
+# 테스트가 한 번도 실행된 적 없는 상태에서 자동 구현을 켜면 PR 품질 판단 근거가 리뷰밖에 없어진다.
+
+on:
+  repository_dispatch:
+    types: [jira-approved]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+# 같은 이슈의 동시 실행만 막는다. 순차 재시도는 아래 브랜치 검사가 막는다.
+concurrency:
+  group: jira-${{ github.event.client_payload.key }}
+  cancel-in-progress: false
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # repository_dispatch 는 멱등성이 없다. 이미 작업한 이슈면 여기서 끝낸다.
+      - name: 중복 실행 검사
+        id: guard
+        env:
+          KEY: ${{ github.event.client_payload.key }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "client_payload.key 가 비어 있다" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --heads origin "feature/$KEY" >/dev/null 2>&1; then
+            echo "이미 feature/$KEY 브랜치가 있다. 종료한다."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: anthropics/claude-code-action@v1
+        if: steps.guard.outputs.skip == 'false'
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: "--max-turns 25 --model sonnet"
+          prompt: |
+            Jira 이슈 ${{ github.event.client_payload.key }} 를 구현한다.
+
+            제목: ${{ github.event.client_payload.summary }}
+            내용:
+            ${{ github.event.client_payload.description }}
+
+            규칙:
+            1. CLAUDE.md 와 docs/design 의 설계서를 기준으로 삼는다.
+            2. feature/${{ github.event.client_payload.key }} 브랜치에서 작업한다.
+            3. 테스트를 함께 작성하고 ./gradlew build 를 통과시킨 뒤 커밋한다.
+            4. gh pr create 로 PR 을 연다. 제목 앞에 이슈 키를 붙인다.
+               본문에 무엇을 왜 그렇게 했는지, 확신이 없는 부분이 어디인지 쓴다.
+            5. 절대 머지하지 않는다. main 에 직접 푸시하지 않는다.
+            6. .github/workflows/ 아래 파일은 수정하지 않는다.
+            7. 요구사항이 불명확하거나, 설계서와 이슈 내용이 어긋나면 구현을 멈춘다.
+               PR 을 만들지 말고 gh issue comment 로 무엇이 불명확한지 남긴 뒤 종료한다.
+               애매한 채로 만든 PR 은 치우는 비용이 만드는 비용보다 크다.
+
+      # 실패하면 이슈가 Approved 에 방치된다. 라벨을 근거로 Jira Automation 이 To Do 로 되돌린다.
+      - name: 실패 표시
+        if: failure() && steps.guard.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEY: ${{ github.event.client_payload.key }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue create \
+            --title "[claude-failed] $KEY 자동 구현 실패" \
+            --label claude-failed \
+            --body "런: $RUN_URL
+
+          Jira $KEY 를 To Do 로 되돌리고 원인을 확인할 것." || true
+
+      - name: 결과 알림
+        if: always()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        run: |
+          [ -z "$SLACK_WEBHOOK" ] && exit 0
+          if [ "${{ steps.guard.outputs.skip }}" = "true" ]; then
+            TEXT="[skipped] ${{ github.event.client_payload.key }} — 브랜치가 이미 있음"
+          else
+            TEXT="[${{ job.status }}] ${{ github.event.client_payload.key }} — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+          curl -s -X POST "$SLACK_WEBHOOK" \
+            -H 'content-type: application/json' \
+            --data "$(jq -nc --arg t "$TEXT" '{text:$t}')" || true

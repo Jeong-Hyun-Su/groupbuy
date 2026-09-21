@@ -1,0 +1,51 @@
+name: claude-mention
+
+# @claude 멘션 대응. 모바일에서 PR 을 이어서 고치는 경로다.
+# 이슈·PR 코멘트, PR 리뷰 코멘트에서 동작한다.
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: claude-mention-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  respond:
+    # 저장소 소유자의 멘션에만 반응한다. 공개 전환 후에도 아무나 액션을 못 돌리게.
+    if: |
+      contains(github.event.comment.body, '@claude') &&
+      github.event.comment.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: "--max-turns 20 --model sonnet"
+          prompt: |
+            아래 코멘트에서 @claude 로 요청받은 작업을 수행한다.
+
+            코멘트:
+            ${{ github.event.comment.body }}
+
+            규칙:
+            1. CLAUDE.md 의 코드 규칙을 따른다.
+            2. PR 에서 멘션됐으면 그 PR 의 브랜치에 커밋한다.
+               이슈에서 멘션됐으면 코드를 고치지 말고 답변만 코멘트로 남긴다.
+            3. 코드를 고쳤으면 테스트를 함께 고치고 ./gradlew build 가 통과하는지 확인한다.
+            4. main 에 직접 푸시하지 않는다. 머지하지 않는다.
+            5. 요청이 불명확하면 추측해서 고치지 말고, 무엇이 불명확한지 코멘트로 묻고 종료한다.
+            6. 작업 후 무엇을 했는지 코멘트로 한 번 남긴다.
