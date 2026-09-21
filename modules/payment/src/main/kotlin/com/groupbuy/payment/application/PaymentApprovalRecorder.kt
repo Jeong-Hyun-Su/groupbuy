@@ -1,6 +1,7 @@
 package com.groupbuy.payment.application
 
 import com.groupbuy.common.time.TimeProvider
+import com.groupbuy.participation.application.ConfirmOutcome
 import com.groupbuy.participation.application.ParticipationConfirmService
 import com.groupbuy.payment.domain.Payment
 import com.groupbuy.payment.domain.PaymentGateway
@@ -32,18 +33,21 @@ class PaymentApprovalRecorder(
     /**
      * 승인 반영. payment APPROVED + participation CONFIRMED + order PAID 가 한 트랜잭션이다.
      *
-     * @return 이번 호출로 승인이 기록됐으면 true. 이미 승인된 건이면 false (R6 멱등)
+     * 참여를 확정할 수 없어도(만료·마감) 결제는 APPROVED 로 **남긴다**. PG 가 받은 돈의 기록이 있어야 환불할 수 있다.
+     * 그때는 `refundRequired = true` 로 돌려주고, 환불은 호출자가 이 트랜잭션 밖에서 한다
+     * (PG 취소가 실패해도 승인 기록이 롤백되면 안 된다).
      */
     @Transactional
     fun record(orderId: Long, orderNo: String, amount: Int, paymentKey: String, approvedAmount: Int): RecordedApproval {
         val payment = lockOrCreate(orderId, orderNo, amount)
         val changed = payment.approve(paymentKey, approvedAmount, timeProvider.now())
 
+        var refundRequired = false
         if (changed) {
-            participationConfirmService.confirmByOrder(orderId)
-            log.info("payment approved: orderNo={} amount={}", orderNo, approvedAmount)
+            refundRequired = participationConfirmService.confirmByOrder(orderId) == ConfirmOutcome.REJECTED
+            log.info("payment approved: orderNo={} amount={} refundRequired={}", orderNo, approvedAmount, refundRequired)
         }
-        return RecordedApproval(amount = payment.amount, status = payment.status.name, newlyApproved = changed)
+        return RecordedApproval(payment.amount, payment.status.name, newlyApproved = changed, refundRequired = refundRequired)
     }
 
     /**
@@ -67,5 +71,5 @@ class PaymentApprovalRecorder(
         }
     }
 
-    data class RecordedApproval(val amount: Int, val status: String, val newlyApproved: Boolean)
+    data class RecordedApproval(val amount: Int, val status: String, val newlyApproved: Boolean, val refundRequired: Boolean)
 }

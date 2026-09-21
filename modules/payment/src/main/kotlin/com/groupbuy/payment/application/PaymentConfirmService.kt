@@ -3,9 +3,11 @@ package com.groupbuy.payment.application
 import com.groupbuy.common.error.DomainException
 import com.groupbuy.common.error.ErrorCode
 import com.groupbuy.participation.application.OrderQueryService
+import com.groupbuy.participation.application.ParticipationConfirmService
 import com.groupbuy.payment.domain.PaymentGateway
 import com.groupbuy.payment.domain.PaymentGatewayException
 import com.groupbuy.payment.domain.PaymentRepository
+import com.groupbuy.payment.domain.RefundReason
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
@@ -41,6 +43,8 @@ class PaymentConfirmService(
     private val paymentGateway: PaymentGateway,
     private val orderQueryService: OrderQueryService,
     private val approvalRecorder: PaymentApprovalRecorder,
+    private val participationConfirmService: ParticipationConfirmService,
+    private val refundService: RefundService,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -55,6 +59,9 @@ class PaymentConfirmService(
 
         // 이미 승인된 건이면 PG 를 다시 호출하지 않는다 (R6). confirm 과 webhook 이 둘 다 와도 한 번만 나간다
         alreadyApproved(command)?.let { return it }
+
+        // 선점이 만료됐거나 딜이 마감됐으면 승인하지 않는다 — 승인이 없으면 환불도 없다 (ADR-07)
+        participationConfirmService.ensureConfirmable(order.orderId)
 
         val approved = try {
             paymentGateway.approve(
@@ -75,7 +82,18 @@ class PaymentConfirmService(
             paymentKey = approved.paymentKey,
             approvedAmount = approved.approvedAmount,
         )
+        if (recorded.refundRequired) refundRejected(order.orderId, command)
         return ConfirmPaymentResult(command.orderNo, recorded.amount, recorded.status, recorded.newlyApproved)
+    }
+
+    /**
+     * 사전 검사와 승인 사이에 만료·마감된 건 (ADR-07). 승인은 APPROVED 로 기록돼 있고, 여기서 전액 취소한다.
+     */
+    // ponytail: 이 환불이 실패하면 "APPROVED 인데 참여는 미확정" 으로 남고 로그·정합성 쿼리로만 드러난다. Phase 3 에서 PENDING refund 행 + 환불 워커가 재시도
+    private fun refundRejected(orderId: Long, command: ConfirmPaymentCommand): Nothing {
+        runCatching { refundService.refund(RefundCommand(orderId, command.amount, RefundReason.DEAL_CLOSED_DURING_PAYMENT)) }
+            .onFailure { log.error("승인 후 확정 불가 건의 전액 환불 실패 (수동 환불 필요): orderNo={}", command.orderNo, it) }
+        throw DomainException(ErrorCode.RESERVATION_EXPIRED, "참여를 확정할 수 없어 결제를 전액 취소했습니다.")
     }
 
     /** 이미 APPROVED 인지 확인. 맞으면 멱등 응답을 만든다 */
