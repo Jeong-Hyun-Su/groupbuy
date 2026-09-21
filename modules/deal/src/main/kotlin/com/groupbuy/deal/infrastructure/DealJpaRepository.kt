@@ -36,17 +36,17 @@ interface DealJpaRepository : JpaRepository<Deal, Long> {
         """
         select distinct d from Deal d
          where (:statuses is null or d.status in :statuses)
-           and (:keyword is null or lower(d.title) like concat('%', :keyword, '%'))
+           and lower(d.title) like :keyword
         """,
         countQuery = """
         select count(d) from Deal d
          where (:statuses is null or d.status in :statuses)
-           and (:keyword is null or lower(d.title) like concat('%', :keyword, '%'))
+           and lower(d.title) like :keyword
         """,
     )
     fun search(
         @Param("statuses") statuses: Collection<DealStatus>?,
-        @Param("keyword") keyword: String?,
+        @Param("keyword") keyword: String,
         pageable: Pageable,
     ): List<Deal>
 
@@ -54,12 +54,12 @@ interface DealJpaRepository : JpaRepository<Deal, Long> {
         """
         select count(d) from Deal d
          where (:statuses is null or d.status in :statuses)
-           and (:keyword is null or lower(d.title) like concat('%', :keyword, '%'))
+           and lower(d.title) like :keyword
         """,
     )
     fun countSearch(
         @Param("statuses") statuses: Collection<DealStatus>?,
-        @Param("keyword") keyword: String?,
+        @Param("keyword") keyword: String,
     ): Long
 
     // Phase 3: 멀티 인스턴스 대비 native 쿼리 + FOR UPDATE SKIP LOCKED 로 교체 (ADR-05)
@@ -100,11 +100,24 @@ class DealRepositoryAdapter(
         limit: Int,
     ): List<Deal> {
         val pageable = PageRequest.of(offset / limit.coerceAtLeast(1), limit, sort.toOrder())
-        return jpa.search(statuses.ifEmpty { null }, keyword?.lowercase(), pageable)
+        return jpa.search(statuses.ifEmpty { null }, keyword.toLikePattern(), pageable)
     }
 
     override fun countSearch(statuses: Collection<DealStatus>, keyword: String?): Long =
-        jpa.countSearch(statuses.ifEmpty { null }, keyword?.lowercase())
+        jpa.countSearch(statuses.ifEmpty { null }, keyword.toLikePattern())
+
+    /**
+     * 키워드를 like 패턴으로 바꾼다. 키워드가 없으면 전체 매칭('%')이다.
+     *
+     * null 을 그대로 바인딩하면 PostgreSQL 이 타입을 못 정해 `text ~~ bytea` 로 터진다.
+     * 그래서 `:keyword is null` 분기를 쓰지 않고 항상 non-null 패턴을 넘긴다.
+     * 사용자 입력의 %, _ 는 와일드카드로 동작하지 않게 이스케이프한다.
+     */
+    private fun String?.toLikePattern(): String {
+        val k = this?.takeIf { it.isNotBlank() } ?: return "%"
+        val escaped = k.lowercase().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        return "%$escaped%"
+    }
 
     private fun DealSort.toOrder(): Sort = when (this) {
         DealSort.CLOSING_SOON -> Sort.by(Sort.Direction.ASC, "closeAt")
