@@ -63,9 +63,9 @@ interface DealJpaRepository : JpaRepository<Deal, Long> {
     ): Long
 
     // Phase 3: 멀티 인스턴스 대비 native 쿼리 + FOR UPDATE SKIP LOCKED 로 교체 (ADR-05)
-    @Query("select d from Deal d where d.status = :status and d.closeAt <= :now order by d.closeAt asc")
-    fun findByStatusAndCloseAtBefore(
-        @Param("status") status: DealStatus,
+    @Query("select d from Deal d where d.status in :statuses and d.closeAt <= :now order by d.closeAt asc")
+    fun findByStatusInAndCloseAtBefore(
+        @Param("statuses") statuses: Collection<DealStatus>,
         @Param("now") now: Instant,
         pageable: Pageable,
     ): List<Deal>
@@ -89,7 +89,8 @@ class DealRepositoryAdapter(
         jpa.findByStatusAndStartAtBefore(DealStatus.SCHEDULED, now, Pageable.ofSize(limit))
 
     override fun findDueToClose(now: Instant, limit: Int): List<Deal> =
-        jpa.findByStatusAndCloseAtBefore(DealStatus.OPEN, now, Pageable.ofSize(limit))
+        // CLOSING 도 집는다 — 판정·환불이 롤백된 딜은 CLOSING 에 남아 있고, 다음 폴링이 이어서 처리해야 한다
+        jpa.findByStatusInAndCloseAtBefore(listOf(DealStatus.OPEN, DealStatus.CLOSING), now, Pageable.ofSize(limit))
 
     override fun search(
         statuses: Collection<DealStatus>,

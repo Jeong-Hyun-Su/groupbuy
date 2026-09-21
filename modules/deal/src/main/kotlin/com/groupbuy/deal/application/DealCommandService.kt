@@ -73,20 +73,28 @@ class DealCommandService(
      * 마감 점유. OPEN → CLOSING (R8).
      * 여러 인스턴스가 동시에 시도해도 행 잠금 + 상태 전이로 하나만 성공한다.
      *
-     * @return 이번 호출이 점유에 성공했으면 true
+     * 이미 CLOSING 이면 재개로 본다. 판정·환불 트랜잭션이 롤백되면 딜은 CLOSING 에 남는데,
+     * 여기서 false 를 주면 그 딜은 영영 마감되지 않는다. 중복 판정은 `finishClosing` 의 행 잠금이 막는다.
+     *
+     * @return 판정을 진행해도 되면 true (새로 점유했거나, 중단된 마감의 재개)
      */
     @Transactional
     fun beginClosing(dealId: Long): Boolean {
         val deal = dealRepository.findByIdForUpdate(dealId) ?: throw NotFoundException(ErrorCode.DEAL_NOT_FOUND)
-        if (deal.status != DealStatus.OPEN) return false     // 다른 인스턴스가 이미 가져갔다
+        if (deal.status == DealStatus.CLOSING) return true    // 중단된 마감의 재개
+        if (deal.status != DealStatus.OPEN) return false      // 이미 판정이 끝났다
         deal.beginClosing(timeProvider.now())
         return true
     }
 
-    /** 마감 판정. CLOSING → SUCCEEDED | FAILED */
+    /**
+     * 마감 판정. CLOSING → SUCCEEDED | FAILED.
+     * 행을 잠근다 — 재개 경로로 두 인스턴스가 동시에 들어와도 뒤쪽은 앞쪽 커밋을 기다렸다가 상태 전이에서 걸린다 (R8).
+     */
+    // ponytail: 뒤쪽 인스턴스가 앞쪽의 환불이 끝날 때까지 행 잠금에서 대기한다. Phase 3 에서 SKIP LOCKED + closing_started_at 타임아웃으로 교체
     @Transactional
     fun finishClosing(dealId: Long, confirmedCount: Int): CloseResult {
-        val deal = load(dealId)
+        val deal = dealRepository.findByIdForUpdate(dealId) ?: throw NotFoundException(ErrorCode.DEAL_NOT_FOUND)
         return deal.finishClosing(confirmedCount, timeProvider.now())
     }
 

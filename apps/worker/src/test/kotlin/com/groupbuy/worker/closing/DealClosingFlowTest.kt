@@ -17,6 +17,7 @@ import com.groupbuy.payment.domain.PaymentGateway
 import com.groupbuy.payment.domain.PaymentRepository
 import com.groupbuy.payment.domain.PaymentStatus
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -53,11 +54,14 @@ class DealClosingFlowTest {
     /** 취소 호출 횟수를 세는 Fake — 이중 환불이 없는지 본다 */
     class CountingFakeGateway : PaymentGateway {
         val cancelCalls = AtomicInteger()
+        /** 남은 횟수만큼 cancel 이 타임아웃으로 실패한다 */
+        val failNextCancels = AtomicInteger()
         override fun providerName() = "FAKE"
         override fun approve(request: PaymentGateway.ApproveRequest) =
             PaymentGateway.ApproveResult(request.paymentKey, request.amount, "2026-09-20T11:00:00+09:00")
         override fun cancel(request: PaymentGateway.CancelRequest): PaymentGateway.CancelResult {
             cancelCalls.incrementAndGet()
+            if (failNextCancels.getAndUpdate { if (it > 0) it - 1 else 0 } > 0) throw IllegalStateException("PG timeout")
             return PaymentGateway.CancelResult("cancel-${request.idempotencyKey}", request.cancelAmount)
         }
         override fun findByOrderNo(orderNo: String): PaymentGateway.ApproveResult? = null
@@ -223,5 +227,23 @@ class DealClosingFlowTest {
             """,
         ).param("dealId", dealId).query(Long::class.javaObjectType).single()
         assertThat(refundRows).isEqualTo(2)          // 참여자당 1건. 이중 환불 없음
+    }
+
+    @Test
+    fun `환불 실패로 롤백된 마감은 CLOSING 에 남고 다음 시도에서 끝난다`() {
+        val dealId = openDealClosingNow(minParticipants = 1)
+        repeat(2) { participateAndPay(dealId) }
+        pushCloseAtToPast(dealId)
+        (gateway as CountingFakeGateway).failNextCancels.set(1)
+
+        assertThatThrownBy { orchestrator.close(dealId) }.hasMessageContaining("PG timeout")
+        assertThat(dealRepository.findById(dealId)!!.status).isEqualTo(DealStatus.CLOSING)
+        assertThat(dealCommandService.findDueToClose()).contains(dealId)      // 다음 폴링이 다시 집는다
+
+        val retried = orchestrator.close(dealId)
+
+        assertThat(retried.closed).isTrue()
+        assertThat(retried.refundedCount).isEqualTo(2)
+        assertThat(dealRepository.findById(dealId)!!.status).isEqualTo(DealStatus.SETTLED)
     }
 }
