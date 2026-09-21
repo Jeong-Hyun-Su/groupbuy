@@ -18,6 +18,9 @@ interface PaymentGateway {
     fun approve(request: ApproveRequest): ApproveResult
     fun cancel(request: CancelRequest): CancelResult
 
-    /** 재시도 전 실제 상태 확인용 (Phase 3) */
+    /**
+     * PG 에 실제로 승인(DONE)된 결제가 있으면 돌려준다.
+     * 웹훅 검증, 승인 응답이 불확실할 때의 재확인에 쓴다 — 요청 본문이 아니라 PG 가 진실의 원천이다.
+     */
     fun findByOrderNo(orderNo: String): ApproveResult?
 }

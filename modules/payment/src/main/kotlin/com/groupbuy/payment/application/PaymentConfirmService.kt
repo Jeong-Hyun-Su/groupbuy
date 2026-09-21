@@ -26,7 +26,9 @@ data class ConfirmPaymentResult(
 )
 
 /**
- * 결제 승인 (설계서 9.2, 10.1). confirm(클라이언트) 과 webhook(PG) 이 같은 이 경로를 탄다.
+ * 결제 승인 (설계서 9.2, 10.1).
+ *   - `confirm`   — 클라이언트 리다이렉트 후. 토스는 **우리가 승인 API 를 불러야** 결제가 DONE 이 된다
+ *   - `reconcile` — 웹훅. DONE 웹훅은 승인 이후에만 오므로 승인하지 않고, PG 조회로 확인한 뒤 반영만 한다
  *
  * 승인은 세 단계다.
  *   1. 사전 검증 — 주문 존재·금액 일치. PG 를 호출하기 전에 틀린 요청을 걷어낸다
@@ -34,7 +36,7 @@ data class ConfirmPaymentResult(
  *   3. 결과 반영 — `PaymentApprovalRecorder` 가 한 트랜잭션으로 처리
  *
  * 2번과 3번 사이에 프로세스가 죽으면 "PG 는 승인했는데 우리 DB 는 모르는" 상태가 된다.
- * Phase 1 은 웹훅 재수신으로 복구한다 (웹훅이 같은 경로를 타고 3번을 다시 실행).
+ * Phase 1 은 웹훅(`reconcile`)이 복구한다. 승인 응답을 못 받은 경우(타임아웃)도 PG 조회로 먼저 확인한다.
  * Phase 3 에서 승인 전 `READY` 행을 먼저 커밋해 고아 승인을 추적 가능하게 만든다.
  */
 @Service
@@ -72,7 +74,10 @@ class PaymentConfirmService(
                 ),
             )
         } catch (e: PaymentGatewayException) {
-            handleApprovalFailure(command, order.orderId, e)
+            // 실패로 보이지만 실제론 승인됐을 수 있다 — 타임아웃, 또는 재시도가 받은 ALREADY_PROCESSED_PAYMENT.
+            // PG 에 물어보고, 승인돼 있으면 그대로 반영한다. 묻지 않고 FAILED 로 기록하면 받은 돈을 잃는다
+            runCatching { paymentGateway.findByOrderNo(command.orderNo) }.getOrNull()
+                ?: handleApprovalFailure(command, order.orderId, e)
         }
 
         val recorded = approvalRecorder.record(
@@ -94,6 +99,28 @@ class PaymentConfirmService(
         runCatching { refundService.refund(RefundCommand(orderId, command.amount, RefundReason.DEAL_CLOSED_DURING_PAYMENT)) }
             .onFailure { log.error("승인 후 확정 불가 건의 전액 환불 실패 (수동 환불 필요): orderNo={}", command.orderNo, it) }
         throw DomainException(ErrorCode.RESERVATION_EXPIRED, "참여를 확정할 수 없어 결제를 전액 취소했습니다.")
+    }
+
+    /**
+     * 웹훅 경로. 본문은 orderNo 말고는 믿지 않는다 — 토스는 결제 웹훅에 서명을 주지 않으므로
+     * 누구나 위조할 수 있다. PG 조회 결과만 반영하면 위조 웹훅은 아무 일도 일으키지 못한다.
+     *
+     * @return 반영 결과. PG 에 승인된 결제가 없으면 null
+     */
+    fun reconcile(orderNo: String): ConfirmPaymentResult? {
+        val order = orderQueryService.getByOrderNo(orderNo)
+        val approved = paymentGateway.findByOrderNo(orderNo) ?: return null
+        val command = ConfirmPaymentCommand(approved.paymentKey, orderNo, approved.approvedAmount)
+
+        alreadyApproved(command)?.let { return it }
+        if (approved.approvedAmount != order.listAmount) {
+            log.error("PG 승인 금액이 주문 금액과 다르다 (수동 확인 필요): orderNo={} pg={} order={}", orderNo, approved.approvedAmount, order.listAmount)
+            throw DomainException(ErrorCode.PAYMENT_AMOUNT_MISMATCH)
+        }
+
+        val recorded = approvalRecorder.record(order.orderId, orderNo, order.listAmount, approved.paymentKey, approved.approvedAmount)
+        if (recorded.refundRequired) refundRejected(order.orderId, command)
+        return ConfirmPaymentResult(orderNo, recorded.amount, recorded.status, recorded.newlyApproved)
     }
 
     /** 이미 APPROVED 인지 확인. 맞으면 멱등 응답을 만든다 */

@@ -17,8 +17,6 @@ data class PaymentProperties(
         val baseUrl: String = "https://api.tosspayments.com",
         /** 테스트 시크릿 키. 운영 키는 환경변수·Secret 으로 주입한다 */
         val secretKey: String = "",
-        /** 웹훅 서명 검증용 시크릿. 비어 있으면 검증을 건너뛴다 (로컬 전용) */
-        val webhookSecret: String = "",
         val connectTimeout: Duration = Duration.ofSeconds(3),
         val readTimeout: Duration = Duration.ofSeconds(15),
     )

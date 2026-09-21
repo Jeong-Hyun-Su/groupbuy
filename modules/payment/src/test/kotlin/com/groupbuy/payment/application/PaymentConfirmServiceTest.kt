@@ -136,6 +136,37 @@ class PaymentConfirmServiceTest {
     }
 
     @Test
+    fun `승인 응답은 못 받았지만 PG 에는 승인돼 있으면 FAILED 가 아니라 APPROVED 로 반영한다`() {
+        gateway.approveFailure = PaymentGatewayException("TIMEOUT", "read timeout", retryable = true)
+        gateway.seedApproved(orderNo, "pay_key_1", listPrice)
+
+        val result = service.confirm(command())
+
+        assertThat(result.newlyApproved).isTrue()
+        assertThat(payments.findByOrderNo(orderNo)!!.status).isEqualTo(PaymentStatus.APPROVED)
+    }
+
+    @Test
+    fun `웹훅은 승인하지 않고 PG 조회 결과만 반영한다`() {
+        gateway.seedApproved(orderNo, "pay_key_1", listPrice)
+
+        val result = service.reconcile(orderNo)!!
+
+        assertThat(result.newlyApproved).isTrue()
+        assertThat(gateway.approveCalls.get()).isZero()
+        assertThat(payments.findByOrderNo(orderNo)!!.pgPaymentKey).isEqualTo("pay_key_1")
+        verify(exactly = 1) { participationConfirmService.confirmByOrder(7) }
+    }
+
+    @Test
+    fun `PG 에 승인된 결제가 없는 웹훅은 아무 일도 일으키지 않는다 — 위조 방어`() {
+        assertThat(service.reconcile(orderNo)).isNull()
+
+        assertThat(payments.findByOrderNo(orderNo)).isNull()
+        verify(exactly = 0) { participationConfirmService.confirmByOrder(any()) }
+    }
+
+    @Test
     fun `없는 주문이면 404 이고 PG 를 호출하지 않는다`() {
         every { orderQueryService.getByOrderNo("nope") } throws NotFoundException(ErrorCode.ORDER_NOT_FOUND)
 

@@ -30,5 +30,4 @@ enum class ErrorCode(val status: Int, val defaultMessage: String) {
     PAYMENT_ALREADY_APPROVED(409, "이미 결제가 완료된 주문입니다."),
     PAYMENT_PENDING(502, "결제 결과를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."),
     ORDER_NOT_FOUND(404, "주문을 찾을 수 없습니다."),
-    WEBHOOK_SIGNATURE_INVALID(401, "웹훅 서명이 올바르지 않습니다."),
 }

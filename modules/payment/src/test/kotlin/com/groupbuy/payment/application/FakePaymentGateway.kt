@@ -19,6 +19,11 @@ class FakePaymentGateway : PaymentGateway {
     /** 승인된 orderNo → 결과 */
     private val approvals = mutableMapOf<String, PaymentGateway.ApproveResult>()
 
+    /** "PG 는 승인했는데 우리는 모르는" 상태를 만든다 — 승인 응답 유실, 프로세스 사망 */
+    fun seedApproved(orderNo: String, paymentKey: String, amount: Int) {
+        approvals[orderNo] = PaymentGateway.ApproveResult(paymentKey, amount, "2026-09-20T11:00:00+09:00")
+    }
+
     override fun providerName(): String = "FAKE"
 
     override fun approve(request: PaymentGateway.ApproveRequest): PaymentGateway.ApproveResult {

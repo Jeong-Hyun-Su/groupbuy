@@ -3,7 +3,6 @@ package com.groupbuy.payment.infrastructure
 import com.fasterxml.jackson.databind.JsonNode
 import com.groupbuy.payment.domain.PaymentGateway
 import com.groupbuy.payment.domain.PaymentGatewayException
-import com.groupbuy.payment.domain.WebhookSecretProvider
 import org.slf4j.LoggerFactory
 import org.springframework.boot.web.client.RestClientCustomizer
 import org.springframework.context.annotation.Bean
@@ -136,11 +135,6 @@ class TossPaymentGateway(
 
 @Configuration
 class PaymentGatewayConfig {
-
-    /** 웹훅 시크릿을 application 레이어에 포트로 넘긴다 */
-    @Bean
-    fun webhookSecretProvider(properties: PaymentProperties): WebhookSecretProvider =
-        WebhookSecretProvider { properties.toss.webhookSecret }
 
     @Bean
     fun tossRestClient(properties: PaymentProperties, customizers: List<RestClientCustomizer>): RestClient {
