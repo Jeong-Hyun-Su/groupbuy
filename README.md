@@ -13,26 +13,26 @@
 | 2 | 동시성 — 정원 초과 0건 | ⏳ |
 | 3 | 결제 정합성 — 돈이 안 맞는 경우 0건 | ⏳ |
 | 4 | 실시간 — 만 명이 같은 게이지를 본다 | ⏳ |
-| 5 | 운영 — 정산·검색·k8s·CI/CD | ⏳ |
+| 5 | 운영 — 정산·검색·k8s·CD | ⏳ |
+
+CI(`.github/workflows/ci.yml` — 빌드·테스트·ArchUnit)는 Phase 1 부터 돈다. Phase 5 는 배포(CD)다.
 
 ## 시작하기
 
 ```bash
-# 1. 인프라
-cd infra && docker compose up -d && cd ..
-
-# 2. 빌드 + 테스트 (첫 실행은 의존성 다운로드로 수 분 소요)
+# 1. 빌드 + 테스트 (Docker 없어도 OK — Testcontainers 테스트만 자동 skip. 첫 실행은 의존성 다운로드로 수 분 소요)
 ./gradlew build
 
-# 3. 실행
+# 2. 실행 (PostgreSQL 필요)
+cd infra && docker compose up -d && cd ..
 ./gradlew :apps:api:bootRun       # http://localhost:8080
 ./gradlew :apps:worker:bootRun    # 스케줄러
 
-# 4. 아키텍처 규칙만 검사
+# 3. 아키텍처 규칙만 검사
 ./gradlew :arch-test:test
 ```
 
-요구사항: JDK 17 이상(툴체인이 JDK 21 을 자동으로 받는다), Docker. Gradle 은 wrapper 가 받는다.
+요구사항: JDK 21 (툴체인이 자동 설치하므로 로컬에 없어도 무관). Docker 는 실행과 통합 테스트에 필요. Gradle 은 wrapper 가 받는다.
 
 > **빌드 메모 (2026-09-16 검증)**
 > - Kotlin 플러그인 버전은 `buildSrc/build.gradle.kts` 한 곳에서만 관리한다. Spring Boot BOM 이 강제하는 `kotlin.version` 은
@@ -86,10 +86,12 @@ groupbuy/
 - [x] 판매자 딜 등록/취소 API, 딜 상세 조회 API
 - [x] `Participation` 엔티티, `Order` 엔티티, DB `FOR UPDATE` 카운팅 참여 API (`POST /api/deals/{id}/participations`)
 - [x] 내 참여 목록 API (`GET /api/me/participations`), 딜 상세의 `myParticipation`
-- [x] 토스페이먼츠 승인 어댑터, `POST /api/payments/confirm`, 웹훅 (`POST /api/payments/webhook`, HMAC 서명 검증)
+- [x] 토스페이먼츠 승인 어댑터, `POST /api/payments/confirm`, 웹훅 (`POST /api/payments/webhook`, PG 조회로 검증)
 - [x] `DealClosingOrchestrator` (worker) — 마감 점유 + 판정 + 동기 환불
 - [x] 선점 만료 스캐너 (`ReservationExpiryService`, 10초 폴링)
 - [x] 딜 목록 API (DB 기반, `GET /api/deals?sort=closing_soon|latest&q=&status=&page=&size=`)
+- [x] 승인 후 확정 불가 건 전액 환불 (ADR-07), 롤백된 마감의 재개
+- [ ] Spring Security + JWT (`X-User-Id` 헤더 대체), OpenAPI(springdoc), JaCoCo
 - [ ] React 클라이언트 (목록/상세/참여/마이페이지)
 - [x] 사용자·판매자·상품 시드 데이터 (`infra/seed/seed.sql`, 사용자 5,000명 + LT-01 딜)
 - [ ] LT-01 실행 → `docs/loadtest/` 에 붕괴 지점 기록 → Phase 2 동기
@@ -108,16 +110,21 @@ groupbuy/
 
 ```bash
 export TOSS_SECRET_KEY=test_sk_...        # 토스 개발자센터 테스트 시크릿 키
-export TOSS_WEBHOOK_SECRET=whsec_...      # 비우면 서명 검증을 건너뛴다 (로컬 전용)
 ```
 
-승인은 `confirm`(클라이언트 리다이렉트 후)과 `webhook`(PG 서버) 두 경로로 들어오고, 먼저 온 쪽이
-승인하고 나머지는 멱등하게 skip 된다 (R6). PG 호출은 트랜잭션 밖에서 하고 결과 반영만 트랜잭션에 넣는다.
+토스는 **우리 서버가 승인 API 를 불러야** 결제가 완료된다. 그래서 두 경로의 역할이 다르다.
 
-| 실패 유형 | 처리 |
+- `confirm` — 클라이언트 리다이렉트 후. 사전 검증(금액·선점 만료·딜 상태) → PG 승인 → 결과 반영
+- `webhook` — 승인하지 않는다. `orderId` 로 **PG 를 조회한 결과**만 반영한다. 승인 직후 프로세스가 죽은 경우의 복구 경로다.
+  토스 결제 웹훅에는 서명이 없어서 본문은 믿지 않는다 — 조회 결과만 쓰면 위조 웹훅은 아무 일도 못 한다
+
+둘이 겹쳐도 결제 행 잠금 + `Payment.approve` 멱등으로 한 번만 반영된다 (R6). PG 호출은 트랜잭션 밖이다.
+
+| 상황 | 처리 |
 |---|---|
-| 카드 거절 등 확정 실패 | `payments.status = FAILED`, 선점은 TTL 만료로 해제 |
-| 타임아웃·5xx 등 결과 불확실 | 아무것도 확정하지 않고 `PAYMENT_PENDING` 반환. 웹훅이 뒤따라 정리 |
+| 카드 거절 등 확정 실패 | PG 조회로 미승인 확인 후 `payments.status = FAILED`. 선점은 TTL 만료로 해제 |
+| 타임아웃·5xx 등 결과 불확실 | PG 조회 → 승인돼 있으면 반영, 아니면 아무것도 확정하지 않고 `PAYMENT_PENDING` |
+| 승인됐는데 선점 만료·딜 마감 (ADR-07) | 결제는 `APPROVED` 로 남기고 즉시 전액 환불. 승인 기록을 롤백하면 환불 근거가 사라진다 |
 
 ## 부하테스트 준비
 
@@ -138,7 +145,8 @@ k6 run -e BASE_URL=http://localhost:8080 -e DEAL_ID=1 infra/k6/participation-bur
 4. **환불** — 성사면 차액, 무산이면 전액 (R4, R5)
 
 트랜잭션은 둘로 나뉜다. 1번은 즉시 커밋해야 다른 인스턴스가 이 딜을 건드리지 않는다.
-2~4번은 `DealSettlementProcessor` 가 한 트랜잭션으로 묶어, 환불이 하나라도 실패하면 판정까지 되돌린다.
+2~4번은 `DealSettlementProcessor` 가 한 트랜잭션으로 묶어, PG 환불 호출이 하나라도 실패하면 판정까지 되돌린다.
+그 딜은 `CLOSING` 에 남고 다음 폴링이 재개한다. 이미 나간 PG 취소는 같은 `Idempotency-Key` 로 재요청되므로 이중 환불은 없다 (R6).
 
 > **Phase 1 의 의도된 한계** — 4번이 동기다. 참여자 100명이면 PG 호출 100번이 한 트랜잭션에 묶여
 > 그동안 DB 커넥션을 붙잡는다. LT-04 로 이 붕괴 지점을 측정해 Phase 3(환불 워커 + 지수 백오프)의 근거로 삼는다.
