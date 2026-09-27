@@ -58,6 +58,8 @@ case "$mode" in
       check ac_complete "설명의 요구가 인수 조건에 빠짐없이 들어갔다"
       check granularity_ok "입도 (PR 하나 = 파일 3~8개, 새 테이블 ≤ 1, 외부 연동 ≤ 1)"
       check verifiable "인수 조건마다 테스트로 확인할 수 있다"
+      # keep·split 에도 구현 전에 확인할 점을 남길 수 있다 (막지는 않는다)
+      if [ "$decision" != "question" ]; then section questions "확인할 점 (구현을 막지는 않음)"; fi
       case "$decision" in
         split)
           echo; echo "*분해안* (아직 만들지 않았다. '승인' 으로 옮기면 하위 작업이 생긴다)"

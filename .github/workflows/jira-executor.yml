@@ -105,7 +105,8 @@ jobs:
           # Bash 는 기본으로 막혀 있다. 여기 적은 명령만 쓸 수 있다 (SCRUM-29).
           claude_args: >-
             --max-turns 30 --model sonnet
-            --allowedTools "Bash(./gradlew:*),Bash(git:*),Bash(gh pr create:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(./gradlew:*),Bash(git:*),Bash(gh pr create:*)"
+
           prompt: |
             .jira/ticket.md 의 Jira 이슈 ${{ github.event.client_payload.key }} 를 구현한다.
             트리아지 코멘트의 인수 조건이 설명에 없으면 설명 기준으로 한다.
@@ -119,6 +120,8 @@ jobs:
                확신이 없는 부분이 어디인지 쓴다. 사람이 이 본문을 읽고 코드를 설명할 수 있어야 머지된다.
             5. 절대 머지하지 않는다. main 에 직접 푸시하지 않는다.
             6. .github/ 아래 파일은 수정하지 않는다.
+               Bash 는 ./gradlew, git, gh pr create 만 쓸 수 있다. cd·ls·cat 은 거부되니 파일은 Read·Glob·Grep 으로 보고 Edit·Write 로 고친다.
+
             7. 요구사항이 불명확하거나, 설계서와 이슈 내용이 어긋나면 구현을 멈춘다.
                PR 을 만들지 말고 무엇이 불명확한지 .jira/question.md 에 쓰고 종료한다.
                애매한 채로 만든 PR 은 치우는 비용이 만드는 비용보다 크다.
