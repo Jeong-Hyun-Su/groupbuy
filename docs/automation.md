@@ -112,12 +112,13 @@ Draft → Ready for review 전에 확인한다.
 | 항목 | 상태 |
 |---|---|
 | `main` Ruleset — 기본 브랜치, PR 필수·승인 0, 필수 검사 `build`, Bypass 없음 | ✅ `gh api repos/Jeong-Hyun-Su/groupbuy/rules/branches/main` 으로 확인 |
-| Jira 상태 4개 추가, `승인` 은 `승인 대기` 에서만, 에픽 제외 | ✅ (`승인` 존재는 승인 대기 티켓에서 확인 필요) |
+| Jira 상태 4개 추가, `승인` 은 `승인 대기` 에서만, 에픽 제외 | ✅ A2 가 `승인 대기` → `승인` 전환으로 동작 |
 | 시크릿 `JIRA_EMAIL`·`JIRA_API_TOKEN` (scope 없는 API 토큰) | ✅ PR #5 에서 jira-sync·pr-review 가 실제 인증 |
 | 워크플로 반영 | ✅ PR #5 머지, jira-sync 가 SCRUM-29 를 완료로 옮김 |
 | Secret scanning·Push protection | ✅ 켜져 있음 |
 | `SLACK_WEBHOOK` 시크릿 (executor 결과 알림) | ✅ 2026-09-28, 시험 메시지 200 |
 | Jira 토큰을 셸 단계에만 (PR #10) | ✅ SCRUM-31 재승인으로 가드·건너뜀 기록 단계가 토큰으로 Jira 를 읽고 쓰는 것, Claude 단계는 건너뛴 것 확인 |
+| Claude 뒤 Jira 기록은 별도 잡 `report`, PR 워크플로는 main 스크립트, 트리아지 뒤 워크스페이스 복원 (PR #12) | ✅ SCRUM-38: 복원 단계 경고 없음, `report` 잡이 PR 링크 코멘트·`검토 중`·Slack |
 | 라벨 `manual` (24·25·26·11·16) | ✅ |
 | Jira Automation A1·A2 + GitHub fine-grained PAT | ✅ A1·A2 모두 상태 전환만으로 동작 확인 |
 | 테스트 티켓으로 확인 절차 | ✅ 2026-09-28, 아래 "확인 결과" |
@@ -157,7 +158,11 @@ PAT 는 fine-grained, 이 저장소만, Contents: Read and write, 만료일 설�
 | split | SCRUM-31 | 인수 조건 10개·하위 작업 5개 제안, 이 단계에서는 하위 작업 없음. 승인 → A2 → SCRUM-33~37 생성, 부모 `진행 중` + `split` |
 | keep | SCRUM-30 | 인수 조건 4개 → 승인 → A2 → Claude 가 README 한 줄 수정, **Draft PR #8** (권한 거부 0, 13턴). 사람이 Ready → 머지 |
 | 분해된 부모 재승인 | SCRUM-31 | `split` 라벨을 보고 구현하지 않고 코멘트만 남긴 뒤 종료 (Claude 미실행) |
+| keep (PR #12 이후) | SCRUM-38 | 승인 → `implement` 잡 구현 → `report` 잡(새 러너)이 **Draft PR #13** 을 찾아 코멘트·`검토 중` |
+| 머지 → 완료 | SCRUM-29·38 | PR 머지 → jira-sync 가 `완료` |
 | 실패 경로 | SCRUM-30·31 | 턴 초과(트리아지 15턴)·편집 권한 없음(executor) 모두 Jira 코멘트 + `질문` 으로 돌아왔다 |
+
+아직 실제로 돌려 보지 않은 경로: 선행 작업 미완료 시 `승인 대기` 로 되돌림, 마지막 하위 작업 머지 시 부모 완료, 머지 없이 닫힌 PR → `질문`, `@claude` 재작업(편집 권한 추가 후), 분해 시 `manual` 상속. 실제 분해 티켓이 생길 때 확인하고 이 표에 추가한다.
 
 ## 알려진 동작과 함정
 
@@ -167,6 +172,7 @@ PAT 는 fine-grained, 이 저장소만, Contents: Read and write, 만료일 설�
 - **Claude 는 `.github/workflows/` 를 직접 고치지 않는다** (로컬 PreToolUse 훅). 초안을 쓰고 사람이 복사한다
 - **Ruleset 은 대상 브랜치를 지정해야 적용된다.** 비워 두면 active 여도 `main` 에 걸리는 규칙이 0개다. `rules/branches/main` 으로 실제 적용을 확인한다
 - **Jira API 토큰은 scope 없는 것.** scope 토큰은 `api.atlassian.com/ex/jira/<cloudId>` 경유라 사이트 주소 호출과 맞지 않는다
+- **`actions/*@v4` 는 Node 20 지원 종료 경고가 뜬다.** 지금은 Node 24 로 강제 실행돼 동작한다. 다음에 워크플로를 고칠 때 v5 로 올린다
 - **브랜치 검사는 끝을 본다.** `feature/SCRUM-1*` 은 SCRUM-12 에도 걸린다 → `(feature|fix)/KEY(-|$)`
 - Claude 앱이 연 PR 에도 `jira-sync` 가 돈다 (PR #8 로 확인). executor 도 `검토 중` 으로 옮기므로 둘이 겹치는데, 이미 그 상태면 `jira.sh transition` 이 아무것도 안 한다
 - **실행 중인 티켓을 지우면** executor·jira-sync 의 Jira 단계가 404 로 실패한다. PR 은 남는다. 테스트 티켓은 끝까지 확인한 뒤 지운다
