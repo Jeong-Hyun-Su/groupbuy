@@ -47,7 +47,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Bash 는 열지 않는다. 읽고 triage.json 하나만 쓴다
           claude_args: >-
-            --max-turns 15 --model opus
+            --max-turns 30 --model opus
             --allowedTools "Read,Glob,Grep,Write"
           prompt: |
             .triage/ticket.md 의 Jira 티켓을 트리아지한다. 코드는 고치지 않는다.
@@ -73,6 +73,7 @@ jobs:
             manual_recommended: 불변식 R1~R8 이나 CLAUDE.md 의 Don't 유형(PG 부작용 후 롤백,
             상태 점유, 실패 두 갈래, 같은 클래스 @Transactional 호출)을 건드리면 true.
 
+            Bash 는 쓸 수 없다. 파일 찾기는 Glob, 내용 검색은 Grep, 읽기는 Read 만 쓴다.
             결과를 .triage/triage.json 에 아래 형식 그대로 쓰고 끝낸다. 다른 파일은 쓰지 않는다.
             {
               "decision": "keep | split | question",

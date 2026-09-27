@@ -108,11 +108,14 @@ Jira 티켓을 Claude 가 분석(그대로 / 분해 / 질문)하고, 사람이 �
 
 웹 요청 공통: `POST https://api.github.com/repos/Jeong-Hyun-Su/groupbuy/dispatches`, 헤더 `Authorization: Bearer <PAT>`, `Accept: application/vnd.github+json`.
 PAT 는 fine-grained, 이 저장소만, Contents: Read and write, 만료일 설정 후 캘린더에 갱신 알림.
+- JQL 의 업무 유형은 **ID 로** 쓴다. 화면 이름(작업)은 번역명이라 JQL 이 못 찾는다("'작업' 값이 'issuetype' 필드에 존재하지 않습니다")
+- `labels not in (manual)` 만 쓰면 라벨이 없는 티켓이 빠진다. `labels is EMPTY OR` 를 붙인다
+- 헤더에 `X-GitHub-Api-Version: 2022-11-28`, `Authorization` 은 숨김. 감사 로그에서 응답 204 면 성공
 
 | 규칙 | 트리거 | 조건 | 본문 |
 |---|---|---|---|
-| A1 | 이슈 전환됨 → `분석 요청` | 유형 ∈ {작업, 스토리} | `{"event_type":"jira-triage","client_payload":{"key":"{{issue.key}}"}}` |
-| A2 | 이슈 전환됨 → `승인` | 유형 ∈ {작업, 스토리, Subtask}, 라벨에 `manual` 없음 | `{"event_type":"jira-approved","client_payload":{"key":"{{issue.key}}"}}` |
+| A1 | 업무 항목 전환됨 → `분석 요청` | JQL `issuetype in (10003, 10004)` (작업·스토리) | `{"event_type":"jira-triage","client_payload":{"key":"{{issue.key}}"}}` |
+| A2 | 업무 항목 전환됨 → `승인` | JQL `issuetype in (10003, 10004, 10002) AND (labels is EMPTY OR labels not in (manual))` | `{"event_type":"jira-approved","client_payload":{"key":"{{issue.key}}"}}` |
 
 ## 확인 절차
 
