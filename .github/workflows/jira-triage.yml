@@ -19,9 +19,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  JIRA_BASE_URL: https://ikerhold1572.atlassian.net
-  JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
   KEY: ${{ github.event.client_payload.key }}
 
 jobs:
@@ -33,6 +30,10 @@ jobs:
 
       # 티켓 본문은 payload 가 아니라 Jira 에서 직접 읽는다. 길이 제한·JSON 이스케이프 문제를 피한다
       - name: 티켓 읽기
+        env:
+          JIRA_BASE_URL: https://ikerhold1572.atlassian.net
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
         run: |
           [[ "$KEY" =~ ^SCRUM-[0-9]+$ ]] || { echo "잘못된 키: $KEY" >&2; exit 1; }
           mkdir -p .triage
@@ -88,11 +89,18 @@ jobs:
             }
 
       - name: Jira 에 반영
+        env:
+          JIRA_BASE_URL: https://ikerhold1572.atlassian.net
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
         run: .github/scripts/triage-apply.sh propose "$KEY" .triage/triage.json
 
       - name: 실패 표시
         if: failure()
         env:
+          JIRA_BASE_URL: https://ikerhold1572.atlassian.net
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           printf 'h3. Claude 트리아지 실패\n런: %s\n\n원인을 확인하고 다시 분석 요청으로 옮긴다.\n' "$RUN_URL" > /tmp/fail.txt
