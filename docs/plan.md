@@ -25,8 +25,8 @@
 
 | 항목 | 내용 |
 |---|---|
-| 범위 | ① G2·G3 재현 테스트 → 수정 ② G5 테스트 정정 ③ Spring Security + JWT (`X-User-Id` 대체. 부하 테스트용 토큰 발급 경로는 `loadtest` 프로파일로 한정) ④ springdoc ⑤ JaCoCo ⑥ `http/` E2E 시나리오 ⑦ LT-01 실행·기록 + 커넥션 풀 10/30/50 비교 |
-| 완료 기준 | E2E 시나리오(생성 → 참여 → 결제 → 마감 → 환불) 통과 · 도메인 커버리지 80% 리포트 · LT-01 기록 1건(무엇이 먼저 무너졌고 왜) · G2·G3 테스트 통과 · 설계서 4.2 "주인 없는 돈" 조회 0건 |
+| 범위 | ① G2·G3·G10 재현 테스트 → 수정 ② G5 테스트 정정 ③ Spring Security + JWT (`X-User-Id` 대체. 부하 테스트용 토큰 발급 경로는 `loadtest` 프로파일로 한정) ④ springdoc ⑤ JaCoCo ⑥ `http/` E2E 시나리오 ⑦ LT-01 실행·기록 + 커넥션 풀 10/30/50 비교 |
+| 완료 기준 | E2E 시나리오(생성 → 참여 → 결제 → 마감 → 환불) 통과 · 도메인 커버리지 80% 리포트 · LT-01 기록 1건(무엇이 먼저 무너졌고 왜) · G2·G3·G10 테스트 통과 · 설계서 4.2 "주인 없는 돈" 조회 0건 |
 | 자를 순서 | 풀 크기 비교 → JWT (ADR 로 "인증은 증명 대상 아님" 기록 후 헤더 유지) |
 
 ### Phase 2 — 동시성: 정원 초과 0건 (1주)
@@ -86,7 +86,7 @@ PG 장애 주입 (WireMock 기준. 토스 응답 형태를 흉내):
 | # | 내용 | 상태 |
 |---|---|---|
 | G1 | Testcontainers 1.21.3 + Docker 29 → 통합 테스트 17개가 **Docker 가 떠 있어도 skip** (`disabledWithoutDocker`) | ✅ 1.21.4 고정으로 해결. 로컬 17개 실행·통과 확인 |
-| G2 | 선점 만료 ↔ 결제 확정 경쟁: `ReservationExpiryService` 는 딜 락·`@Version` 없이 RESERVED 를 읽어 `expire()` 한다. 만료 직전에 시작한 `confirmByOrder` 가 스캐너 조회 뒤에 커밋하면 CONFIRMED 가 EXPIRED 로 덮여, 결제는 APPROVED 인데 참여·환불이 없다 | 확인 필요 → Phase 1 (재현 테스트 먼저) |
+| G2 | 선점 만료 ↔ 결제 확정 경쟁: `ReservationExpiryService` 는 딜 락·`@Version` 없이 RESERVED 를 읽어 `expire()` 한다. `confirmByOrder` 는 `now` 를 **딜 락을 기다리기 전에** 잡으므로, 락 대기가 길면 만료 시각을 넘겨 확정할 수 있다. 그 사이 스캐너가 RESERVED 로 읽었다면 확정 커밋 뒤 행 락이 풀리는 대로 EXPIRED 로 덮어쓴다(READ COMMITTED). 결과: 결제는 APPROVED 인데 참여는 빠지고 환불도 없다 (설계서 4.2 "주인 없는 돈") | 확인 필요 → Phase 1 (재현 테스트 먼저) |
 | G3 | 카드 거절(`FAILED`) 뒤 같은 주문으로 재결제가 승인되면 `approve` 가 상태 전이 예외 → 승인 기록 롤백. 웹훅도 같은 예외를 삼킨다. 토스의 orderId 재사용 규칙을 **공식 문서로 확인** 후 판단 | 확인 필요 → Phase 1 |
 | G4 | 환불 실패 시 FAILED 딜·미정산 SUCCEEDED 딜을 다시 집는 경로 없음 | Phase 3 환불 워커 |
 | G5 | `PaymentFlowTest` 의 "confirm 과 webhook 동시 도착" 테스트가 실제로는 confirm 만 호출 (Fake 의 조회가 null) | Phase 1 |
@@ -94,6 +94,7 @@ PG 장애 주입 (WireMock 기준. 토스 응답 형태를 흉내):
 | G7 | 부하 규모 비현실 | 위 "부하 규모 규칙" |
 | G8 | 워크플로 3개가 참조하는 `CLAUDE.md` 부재 | ✅ 추가 |
 | G9 | 빈 `modules/search` | ✅ 제거, ADR-012 |
+| G10 | `PaymentApprovalRecorder.lockOrCreate` 의 "insert 경쟁은 UNIQUE 가 정리한다" 복구 경로가 동작하지 않는다. UNIQUE 위반 뒤 같은 트랜잭션에서 다시 조회하면 Hibernate 세션이 깨져 있다(`HHH000099 AssertionFailure`, PostgreSQL 은 트랜잭션도 abort). `PaymentFlowTest` 동시 8건 중 6건이 이 경로로 오류를 냈다(테스트 로그). 승인은 1건만 기록돼 돈은 맞지만, 경쟁에서 진 요청은 500 을 받는다. 테스트가 `errors` 를 허용해 가려져 있었다 | 확인됨 → Phase 1 (행을 승인 전에 별도 트랜잭션으로 먼저 만들거나 `INSERT … ON CONFLICT DO NOTHING` 후 `FOR UPDATE`) |
 
 ## 백로그 (시간이 남으면)
 
