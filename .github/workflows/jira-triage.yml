@@ -88,6 +88,19 @@ jobs:
               "questions": ["질문"]
             }
 
+      # Claude 는 Write 도구로 워크스페이스 파일을 바꿀 수 있다. 다음 단계가 .github/scripts 를 Jira 토큰과 함께
+      # 실행하므로(실패 표시 포함), 그 전에 추적 파일을 되돌리고 새 파일을 지운다. 결과물 .triage/ 는 gitignore 라 남는다
+      - name: 워크스페이스 복원
+        if: always()
+        run: |
+          changed=$(git status --porcelain)
+          if [ -n "$changed" ]; then
+            echo "::warning::트리아지가 .triage/ 밖의 파일을 바꿨다. 되돌린다:"
+            echo "$changed"
+          fi
+          git checkout -- .
+          git clean -fdq
+
       - name: Jira 에 반영
         env:
           JIRA_BASE_URL: https://ikerhold1572.atlassian.net

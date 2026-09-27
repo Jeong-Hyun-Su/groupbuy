@@ -27,13 +27,16 @@ jobs:
   review:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # 포크 PR 에는 시크릿이 없다. 이 저장소 브랜치의 PR 만 본다
+    if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       # 티켓의 인수 조건(AC)을 읽어 둔다. 하위 작업은 설명에, 나머지는 트리아지 첨부(triage.json)에 있다.
-      # Jira 를 못 읽어도 리뷰는 한다
+      # Jira 를 못 읽어도 리뷰는 한다. jira.sh 는 PR 브랜치가 아니라 main 의 것을 쓴다
+      # (PR 브랜치가 .github/scripts 를 바꿔도 Jira 토큰을 든 채 실행되지 않게)
       - name: 인수 조건 읽기
         env:
           JIRA_BASE_URL: https://ikerhold1572.atlassian.net
@@ -41,15 +44,18 @@ jobs:
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           HEAD: ${{ github.event.pull_request.head.ref }}
           TITLE: ${{ github.event.pull_request.title }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           mkdir -p .review
           echo "(인수 조건 없음 — 이 항목은 건너뛴다)" > .review/ac.md
           key=$(printf '%s\n%s\n' "$HEAD" "$TITLE" | grep -oE 'SCRUM-[0-9]+' | head -1 || true)
           [ -n "$key" ] && [ -n "$JIRA_API_TOKEN" ] || exit 0
-          issue=$(.github/scripts/jira.sh get "$key" summary,description,issuetype) || exit 0
+          J="$RUNNER_TEMP/jira.sh"
+          git fetch -q origin "$DEFAULT_BRANCH" && git show FETCH_HEAD:.github/scripts/jira.sh > "$J" && chmod +x "$J" || exit 0
+          issue=$("$J" get "$key" summary,description,issuetype) || exit 0
           if [ "$(jq -r '.fields.issuetype.subtask' <<<"$issue")" = "true" ]; then
             jq -r '"# " + .key + " " + .fields.summary + "\n\n" + (.fields.description // "")' <<<"$issue" > .review/ac.md
-          elif .github/scripts/jira.sh attachment "$key" triage.json .review/triage.json; then
+          elif "$J" attachment "$key" triage.json .review/triage.json; then
             { jq -r '"# " + .key + " " + .fields.summary' <<<"$issue"
               jq -r '.acceptance_criteria[] | "* " + .' .review/triage.json; } > .review/ac.md
           fi
