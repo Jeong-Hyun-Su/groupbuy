@@ -34,7 +34,7 @@ env:
 jobs:
   implement:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     outputs:
       skip: ${{ steps.guard.outputs.skip }}
       reason: ${{ steps.guard.outputs.reason }}
@@ -121,8 +121,9 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Bash 는 기본으로 막혀 있다. 여기 적은 명령만 쓸 수 있다 (SCRUM-29).
+          # 턴: 문서 한 곳 고친 SCRUM-38 이 20턴을 썼다. 코드 + 테스트 + 빌드 반복이면 30 으로는 모자란다
           claude_args: >-
-            --max-turns 30 --model sonnet
+            --max-turns 60 --model sonnet
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(./gradlew:*),Bash(git:*),Bash(gh pr create:*)"
           prompt: |
             .jira/ticket.md 의 Jira 이슈 ${{ github.event.client_payload.key }} 를 구현한다.
@@ -189,8 +190,12 @@ jobs:
 
           # 실패하면 이슈가 진행 중에 방치된다. Jira 에 흔적을 남기고 '질문' 으로 돌린다
           fail() {
-            printf 'h3. Claude 자동 구현 실패\n런: %s\n\n%s\n원인을 확인한다. 브랜치 feature/%s 가 남아 있으면 지워야 다시 승인할 수 있다.\n' \
-              "$RUN_URL" "$1" "$KEY" > /tmp/fail.txt
+            # 턴 초과 등으로 끝났어도 PR 은 이미 열렸을 수 있다. 살릴지 닫을지 사람이 정하게 링크를 남긴다
+            open_pr=$(gh pr list --head "feature/$KEY" --state open --json url -q '.[0].url // empty' || true)
+            pr_line=""
+            [ -z "$open_pr" ] || pr_line="열린 PR: $open_pr (살릴지 닫을지 정한다)"$'\n'
+            printf 'h3. Claude 자동 구현 실패\n런: %s\n\n%s\n%s원인을 확인한다. 브랜치 feature/%s 가 남아 있으면 지워야 다시 승인할 수 있다.\n' \
+              "$RUN_URL" "$1" "$pr_line" "$KEY" > /tmp/fail.txt
             .github/scripts/jira.sh comment "$KEY" /tmp/fail.txt || true
             .github/scripts/jira.sh transition "$KEY" "질문" || true
             echo "status=failure" >> "$GITHUB_OUTPUT"
