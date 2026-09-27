@@ -25,6 +25,7 @@ Claude 는 `.github/workflows/` 를 직접 고치지 않는다(로컬 훅이 막
    - `분석 요청`·`질문`·`승인 대기` 는 "모든 상태에서" 전이 허용
    - `승인` 은 **`승인 대기` 에서만** 전이 허용 (전역 전이 끄기)
    - 상태 **이름을 정확히** 위와 같게. `jira.sh transition` 이 이름으로 전이를 찾는다
+   - 적용 업무 유형: **작업, 스토리, Subtask**. 에픽은 기존 4상태 워크플로에 둔다 (Phase 묶음이라 자동화 대상이 아니고, 실수로 '승인' 해도 A2 가 돌 경로가 없게)
 4. **라벨** `manual` — SCRUM-24·25·26·11·16
 5. **시크릿** (GitHub 저장소 → Settings → Secrets → Actions)
    - `JIRA_EMAIL` — Atlassian 계정 이메일
@@ -38,7 +39,7 @@ Claude 는 `.github/workflows/` 를 직접 고치지 않는다(로컬 훅이 막
    - PAT: 이 저장소만, 권한 Contents: Read and write, 만료일 설정 후 캘린더에 갱신 알림
    - **A1** 트리거 "이슈 전환됨 → 분석 요청", 조건 이슈 유형 ∈ {작업, 스토리}, 본문
      `{"event_type":"jira-triage","client_payload":{"key":"{{issue.key}}"}}`
-   - **A2** 트리거 "이슈 전환됨 → 승인", 조건 라벨에 `manual` 없음, 본문
+   - **A2** 트리거 "이슈 전환됨 → 승인", 조건 이슈 유형 ∈ {작업, 스토리, Subtask} 그리고 라벨에 `manual` 없음, 본문
      `{"event_type":"jira-approved","client_payload":{"key":"{{issue.key}}"}}`
    - 본문은 키만 보낸다. 제목·설명은 워크플로가 Jira 에서 직접 읽는다 (jsonEncode·길이 문제를 피한다)
 7. **워크플로 반영** — 2026-09-28 완료 (초안을 `.github/workflows/` 로 복사). Automation 규칙(6)은 이 PR 머지 뒤에 켠다
