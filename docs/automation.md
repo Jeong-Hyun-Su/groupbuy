@@ -45,7 +45,7 @@ Jira 티켓을 Claude 가 분석(그대로 / 분해 / 질문)하고, 사람이 �
 | 8 | 완료 | 완료 | 모든 상태 | Actions (PR 머지). 안 할 일은 해결 "하지 않음" |
 
 라벨:
-- `manual` — 직접 구현. 돈 경로·불변식(R1~R8)을 건드리는 티켓. 대상 SCRUM-24·25·26(돈 버그), 11(트러블슈팅 기록), 16(LT-01)
+- `manual` — 직접 구현. 돈 경로·불변식(R1~R8)을 건드리는 티켓. 대상 SCRUM-24·25·26(돈 버그), 11(트러블슈팅 기록), 16(LT-01). 트리아지가 직접 구현을 권고한 티켓을 분해하면 하위 작업에 자동으로 붙는다
 - `split-proposed` — 트리아지가 분해를 제안함. 게이트 2 승인 시 하위 작업 생성
 - `split` — 이미 분해된 부모. 다시 승인해도 구현하지 않는다
 
@@ -55,7 +55,7 @@ Jira 티켓을 Claude 가 분석(그대로 / 분해 / 질문)하고, 사람이 �
 |---|---|---|
 | `.github/workflows/jira-triage.yml` | `repository_dispatch: jira-triage` (A1) | 티켓을 Jira 에서 읽어 Claude(opus, Read·Glob·Grep·Write 만)가 `triage.json` 작성 → `triage-apply.sh propose` |
 | `.github/workflows/jira-executor.yml` | `repository_dispatch: jira-approved` (A2) | 가드(브랜치·manual·split·선행 작업) → `split-proposed` 면 하위 작업만 생성, 아니면 Claude(sonnet) 구현 → Draft PR → 검토 중. 질문·실패는 Jira 코멘트 + `질문` |
-| `.github/workflows/jira-sync.yml` | PR opened·reopened·closed | 브랜치·제목의 `SCRUM-N` → 검토 중 / 머지 시 완료(+부모) |
+| `.github/workflows/jira-sync.yml` | PR opened·reopened·closed | 브랜치·제목의 `SCRUM-N` → 검토 중 / 머지 시 완료(+부모) / 머지 없이 닫히면 검토 중이던 티켓만 질문 |
 | `.github/workflows/pr-review.yml` | PR opened·synchronize (코드 변경) | 결함 유형 6가지 + Jira 인수 조건(AC) 번호별 테스트 대조 표 |
 | `.github/workflows/ci.yml` | push main, PR | `./gradlew build`, 아키텍처 규칙, skip 0 검사 |
 | `.github/workflows/claude-mention.yml` | 소유자의 `@claude` 코멘트 | PR 브랜치에 수정 커밋 (게이트 4 재작업 경로) |
@@ -81,7 +81,7 @@ Jira 티켓을 Claude 가 분석(그대로 / 분해 / 질문)하고, 사람이 �
 
 ## 설계 원칙과 이유
 
-- **Claude 는 판단만, Jira 쓰기는 셸.** Jira 토큰을 Claude 도구에 넘기지 않는다. 생성 개수·형식을 셸이 검증하므로 모델이 규칙을 무시해도 결과가 틀어지지 않는다
+- **Claude 는 판단만, Jira 쓰기는 셸.** Jira 토큰은 Jira 를 부르는 셸 단계의 `env` 에만 둔다. 워크플로 전체 `env` 에 두면 Claude 단계에도 들어가 `./gradlew`(Claude 가 고치는 빌드·테스트 코드)로 읽을 수 있다. 생성 개수·형식을 셸이 검증하므로 모델이 규칙을 무시해도 결과가 틀어지지 않는다
 - **멈춤·되돌림 판단은 프롬프트가 아니라 셸에서.** 중복 실행, manual, 선행 작업, Draft 강제, 열린 질문 → question 전환이 모두 셸이다. 프롬프트 규칙은 모델이 어길 수 있다
 - **분해 기준은 `/plan` 과 같다.** PR 하나 = 파일 3~8개, 새 테이블 1개 이하, 외부 연동 1개 이하. 하위 작업 하나 = PR 하나
 - **Automation 규칙은 2개만.** Jira Free 는 사이트 전체 월 150 steps(동시 5). 규칙 1회 ≈ 2 steps, 티켓당 약 4 steps → 월 35티켓 안팎. 나머지 전이는 Actions 가 REST 로 한다
@@ -141,6 +141,8 @@ PAT 는 fine-grained, 이 저장소만, Contents: Read and write, 만료일 설�
 | 실패 경로 | SCRUM-30·31 | 턴 초과(트리아지 15턴)·편집 권한 없음(executor) 모두 Jira 코멘트 + `질문` 으로 돌아왔다 |
 
 ## 알려진 동작과 함정
+
+- **공개 저장소라 Actions 로그가 누구에게나 보인다.** 로그에 Claude 프롬프트, 즉 Jira 티켓 본문이 그대로 찍힌다. 티켓에 면접·개인정보·회사 내부 내용을 쓰지 않는다
 
 - **워크플로 파일을 바꾸는 PR 에서는 Claude 리뷰가 건너뛰어진다.** claude-code-action 이 "워크플로가 기본 브랜치와 같아야 한다"고 검증한다. 체크는 성공으로 뜬다. 머지 뒤 다음 PR 부터 돈다
 - **Claude 는 `.github/workflows/` 를 직접 고치지 않는다** (로컬 PreToolUse 훅). 초안을 쓰고 사람이 복사한다

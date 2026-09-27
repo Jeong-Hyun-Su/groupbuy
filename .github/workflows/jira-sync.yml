@@ -26,8 +26,6 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # 머지 없이 닫힌 PR 은 건드리지 않는다
-    if: github.event.action != 'closed' || github.event.pull_request.merged
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,8 +45,19 @@ jobs:
         if: steps.key.outputs.key != ''
         env:
           KEY: ${{ steps.key.outputs.key }}
+          ACTION: ${{ github.event.action }}
           MERGED: ${{ github.event.pull_request.merged }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
+          if [ "$ACTION" = "closed" ] && [ "$MERGED" != "true" ]; then
+            # 다른 PR 로 이미 완료됐거나 사람이 옮긴 티켓은 건드리지 않는다
+            [ "$(.github/scripts/jira.sh status "$KEY")" = "검토 중" ] || exit 0
+            printf 'h3. PR 이 머지 없이 닫혔다\n%s\n\n다시 할지 정해 승인 대기 또는 완료(하지 않음)로 옮긴다. 자동 구현을 다시 돌리려면 브랜치 feature/%s 를 지운다.\n' "$PR_URL" "$KEY" > /tmp/closed.txt
+            .github/scripts/jira.sh comment "$KEY" /tmp/closed.txt
+            .github/scripts/jira.sh transition "$KEY" "질문"
+            exit 0
+          fi
+          
           if [ "$MERGED" != "true" ]; then
             .github/scripts/jira.sh transition "$KEY" "검토 중"
             exit 0

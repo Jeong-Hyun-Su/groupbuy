@@ -24,9 +24,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  JIRA_BASE_URL: https://ikerhold1572.atlassian.net
-  JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
   KEY: ${{ github.event.client_payload.key }}
 
 jobs:
@@ -41,6 +38,10 @@ jobs:
       # repository_dispatch 는 멱등성이 없다. 판단은 프롬프트가 아니라 셸에서 한다
       - name: 가드
         id: guard
+        env:
+          JIRA_BASE_URL: https://ikerhold1572.atlassian.net
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
         run: |
           [[ "$KEY" =~ ^SCRUM-[0-9]+$ ]] || { echo "잘못된 키: $KEY" >&2; exit 1; }
           skip() { echo "$1"; printf '%s\n' "$1" > /tmp/skip.txt; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; }
@@ -96,6 +97,10 @@ jobs:
 
       - name: 건너뜀 기록
         if: steps.guard.outputs.skip == 'true' && steps.guard.outputs.split != 'true'
+        env:
+          JIRA_BASE_URL: https://ikerhold1572.atlassian.net
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
         run: .github/scripts/jira.sh comment "$KEY" /tmp/skip.txt || true
 
       - uses: anthropics/claude-code-action@v1
@@ -129,6 +134,9 @@ jobs:
       - name: Jira 에 결과 반영
         if: steps.guard.outputs.skip == 'false'
         env:
+          JIRA_BASE_URL: https://ikerhold1572.atlassian.net
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -s .jira/question.md ]; then
@@ -155,6 +163,9 @@ jobs:
       - name: 실패 표시
         if: failure()
         env:
+          JIRA_BASE_URL: https://ikerhold1572.atlassian.net
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           printf 'h3. Claude 자동 구현 실패\n런: %s\n\n원인을 확인한다. 브랜치 feature/%s 가 남아 있으면 지워야 다시 승인할 수 있다.\n' "$RUN_URL" "$KEY" > /tmp/fail.txt
