@@ -66,7 +66,7 @@ Draft → Ready for review 전에 확인한다.
 |---|---|---|
 | `.github/workflows/jira-triage.yml` | `repository_dispatch: jira-triage` (A1) | 티켓을 Jira 에서 읽어 Claude(opus, Read·Glob·Grep·Write 만)가 `triage.json` 작성 → `triage-apply.sh propose` |
 | `.github/workflows/jira-executor.yml` | `repository_dispatch: jira-approved` (A2) | 잡 2개. `implement`: 가드(브랜치·manual·split·선행 작업) → `split-proposed` 면 하위 작업만 생성, 아니면 Claude(sonnet) 구현 → Draft PR, 질문은 아티팩트로. `report`: 새 러너에서 main 을 받아 Jira 에 결과(검토 중 / 질문 / 실패) + Slack |
-| `.github/workflows/jira-sync.yml` | PR opened·reopened·closed (이 저장소 브랜치만) | 브랜치·제목의 `SCRUM-N` → 검토 중 / 머지 시 완료(+부모) / 머지 없이 닫히면 검토 중이던 티켓만 질문 |
+| `.github/workflows/jira-sync.yml` | PR opened·reopened·closed (이 저장소 브랜치만) | 브랜치 접두 `(feature\|fix\|chore)/SCRUM-N` 또는 제목 접두 `SCRUM-N:` → 검토 중(완료된 티켓은 그대로) / 머지 시 완료(+부모) / 머지 없이 닫히면 검토 중이던 티켓만 질문 |
 | `.github/workflows/pr-review.yml` | PR opened·synchronize (코드 변경) | 결함 유형 6가지 + Jira 인수 조건(AC) 번호별 테스트 대조 표 |
 | `.github/workflows/ci.yml` | push main, PR | `./gradlew build`, 아키텍처 규칙, skip 0 검사 |
 | `.github/workflows/claude-mention.yml` | 소유자의 `@claude` 코멘트 | PR 브랜치에 수정 커밋 (게이트 4 재작업 경로) |
@@ -175,6 +175,8 @@ PAT 는 fine-grained, 이 저장소만, Contents: Read and write, 만료일 설�
 - **`actions/*@v4` 는 Node 20 지원 종료 경고가 뜬다.** 지금은 Node 24 로 강제 실행돼 동작한다. 다음에 워크플로를 고칠 때 v5 로 올린다
 - **브랜치 검사는 끝을 본다.** `feature/SCRUM-1*` 은 SCRUM-12 에도 걸린다 → `(feature|fix)/KEY(-|$)`
 - Claude 앱이 연 PR 에도 `jira-sync` 가 돈다 (PR #8 로 확인). executor 도 `검토 중` 으로 옮기므로 둘이 겹치는데, 이미 그 상태면 `jira.sh transition` 이 아무것도 안 한다
+- **PR 은 브랜치 접두나 제목 접두로만 티켓에 연결된다.** 제목 중간에 적은 키는 무시한다. 예전에는 아무 데서나 `SCRUM-N` 을 찾아서, 제목에 "(SCRUM-38)" 을 적은 문서 PR 이 완료된 SCRUM-38 을 `검토 중` 으로 되돌렸다 (PR #14)
+- **분해 도중 실패하면 하위 작업이 일부만 남는다.** 재승인해도 `create` 가 "이미 하위 작업이 있다"로 멈춘다. 남은 하위 작업을 지우고 다시 승인하거나, 나머지를 손으로 만든 뒤 부모 라벨을 `split-proposed` → `split` 으로 바꾼다
 - **실행 중인 티켓을 지우면** executor·jira-sync 의 Jira 단계가 404 로 실패한다. PR 은 남는다. 테스트 티켓은 끝까지 확인한 뒤 지운다
 - **Blocks 링크 생성 요청에서는 `inwardIssue` 가 막는 쪽**이다(조회 응답과 반대로 읽힌다). 처음에 거꾸로 만들어 PR #7 에서 고쳤다
 - executor·claude-mention 은 `--allowedTools` 에 `Edit,Write` 가 없으면 파일을 못 고치고, 권한 거부만 반복하다 PR 없이 끝난다 (PR #7)
