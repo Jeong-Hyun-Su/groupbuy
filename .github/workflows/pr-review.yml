@@ -48,7 +48,9 @@ jobs:
         run: |
           mkdir -p .review
           echo "(인수 조건 없음 — 이 항목은 건너뛴다)" > .review/ac.md
-          key=$(printf '%s\n%s\n' "$HEAD" "$TITLE" | grep -oE 'SCRUM-[0-9]+' | head -1 || true)
+          # jira-sync 와 같은 규칙: 브랜치 접두 또는 제목 접두에서만
+          key=$(printf '%s\n' "$HEAD" | grep -oE '^(feature|fix|chore)/SCRUM-[0-9]+' | grep -oE 'SCRUM-[0-9]+' || true)
+          [ -n "$key" ] || key=$(printf '%s\n' "$TITLE" | grep -oE '^SCRUM-[0-9]+:' | tr -d : || true)
           [ -n "$key" ] && [ -n "$JIRA_API_TOKEN" ] || exit 0
           J="$RUNNER_TEMP/jira.sh"
           git fetch -q origin "$DEFAULT_BRANCH" && git show FETCH_HEAD:.github/scripts/jira.sh > "$J" && chmod +x "$J" || exit 0
