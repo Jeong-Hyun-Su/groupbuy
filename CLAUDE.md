@@ -48,6 +48,7 @@ Kotlin 2.2.0, Spring Boot 3.5.6, JDK 21, JPA, PostgreSQL 16, Flyway, Gradle 8.14
 
 ## Workflow
 - 브랜치 `feature/SCRUM-N`, `fix/SCRUM-N`, 문서·설정은 `chore/…`. 커밋 `SCRUM-N: 요약` (한국어)
+- Jira 자동화(트리아지·자동 구현·상태 동기화)와 사람 게이트는 `docs/automation.md`. 라벨 `manual` 티켓은 자동 구현하지 않는다. `.github/workflows/` 는 초안만 쓰고 사람이 반영한다
 - 측정하는 작업은 **측정 전에 예측**을 `docs/phases/` 에 적고, 수치는 `docs/loadtest/` 원자료에서만 인용한다
 - Phase 가 끝나면 결과 문서, ADR 확정, `docs/plan.md` 진행표, 태그 `phase-N`
 - "완료"는 테스트 명령과 출력으로 증명한다

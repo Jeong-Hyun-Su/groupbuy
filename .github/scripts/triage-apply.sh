@@ -38,6 +38,8 @@ file=$tmp/triage.json
 decision=$(jq -r '.decision' "$file")
 
 list() { jq -r --arg f "$1" '(.[$f] // [])[] | "* " + .' "$file"; }
+# 비어 있는 항목은 제목째 뺀다 (질문 판정이면 인수 조건·영향 파일이 없다)
+section() { local body; body=$(list "$1"); [ -z "$body" ] || printf '*%s*\n%s\n\n' "$2" "$body"; }
 check() { jq -r --arg f "$1" --arg l "$2" '"* " + $l + ": " + (if .self_check[$f] == true then "통과" elif .self_check[$f] == false then "(!) 미흡" else "-" end)' "$file"; }
 
 case "$mode" in
@@ -49,9 +51,9 @@ case "$mode" in
         echo "*(!) 직접 구현 권고* — 불변식(R1~R8)이나 돈 경로를 건드린다. 직접 하려면 라벨 {{manual}} 을 붙이고 '진행 중' 으로 옮긴다."
         echo
       fi
-      echo "*인수 조건*"; list acceptance_criteria; echo
-      echo "*영향 파일*"; list affected_files; echo
-      echo "*위험*"; list risks; echo
+      section acceptance_criteria "인수 조건"
+      section affected_files "영향 파일"
+      section risks "위험"
       echo "*자기 점검*"
       check ac_complete "설명의 요구가 인수 조건에 빠짐없이 들어갔다"
       check granularity_ok "입도 (PR 하나 = 파일 3~8개, 새 테이블 ≤ 1, 외부 연동 ≤ 1)"
