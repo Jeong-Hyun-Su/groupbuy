@@ -26,9 +26,14 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # 포크 PR 에는 시크릿이 없다. 이 저장소 브랜치의 PR 만 본다
+    if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
+      # 스크립트는 PR 브랜치가 아니라 main 에서 받는다. PR 브랜치(Claude 가 만든 것 포함)가
+      # .github/scripts 를 바꿔도 Jira 토큰을 든 채 실행되지 않게
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: .github/scripts
 
       - name: 이슈 키 찾기

@@ -54,8 +54,8 @@ Jira 티켓을 Claude 가 분석(그대로 / 분해 / 질문)하고, 사람이 �
 | 파일 | 트리거 | 하는 일 |
 |---|---|---|
 | `.github/workflows/jira-triage.yml` | `repository_dispatch: jira-triage` (A1) | 티켓을 Jira 에서 읽어 Claude(opus, Read·Glob·Grep·Write 만)가 `triage.json` 작성 → `triage-apply.sh propose` |
-| `.github/workflows/jira-executor.yml` | `repository_dispatch: jira-approved` (A2) | 가드(브랜치·manual·split·선행 작업) → `split-proposed` 면 하위 작업만 생성, 아니면 Claude(sonnet) 구현 → Draft PR → 검토 중. 질문·실패는 Jira 코멘트 + `질문` |
-| `.github/workflows/jira-sync.yml` | PR opened·reopened·closed | 브랜치·제목의 `SCRUM-N` → 검토 중 / 머지 시 완료(+부모) / 머지 없이 닫히면 검토 중이던 티켓만 질문 |
+| `.github/workflows/jira-executor.yml` | `repository_dispatch: jira-approved` (A2) | 잡 2개. `implement`: 가드(브랜치·manual·split·선행 작업) → `split-proposed` 면 하위 작업만 생성, 아니면 Claude(sonnet) 구현 → Draft PR, 질문은 아티팩트로. `report`: 새 러너에서 main 을 받아 Jira 에 결과(검토 중 / 질문 / 실패) + Slack |
+| `.github/workflows/jira-sync.yml` | PR opened·reopened·closed (이 저장소 브랜치만) | 브랜치·제목의 `SCRUM-N` → 검토 중 / 머지 시 완료(+부모) / 머지 없이 닫히면 검토 중이던 티켓만 질문 |
 | `.github/workflows/pr-review.yml` | PR opened·synchronize (코드 변경) | 결함 유형 6가지 + Jira 인수 조건(AC) 번호별 테스트 대조 표 |
 | `.github/workflows/ci.yml` | push main, PR | `./gradlew build`, 아키텍처 규칙, skip 0 검사 |
 | `.github/workflows/claude-mention.yml` | 소유자의 `@claude` 코멘트 | PR 브랜치에 수정 커밋 (게이트 4 재작업 경로) |
@@ -81,7 +81,12 @@ Jira 티켓을 Claude 가 분석(그대로 / 분해 / 질문)하고, 사람이 �
 
 ## 설계 원칙과 이유
 
-- **Claude 는 판단만, Jira 쓰기는 셸.** Jira 토큰은 Jira 를 부르는 셸 단계의 `env` 에만 둔다. 워크플로 전체 `env` 에 두면 Claude 단계에도 들어가 `./gradlew`(Claude 가 고치는 빌드·테스트 코드)로 읽을 수 있다. 생성 개수·형식을 셸이 검증하므로 모델이 규칙을 무시해도 결과가 틀어지지 않는다
+- **Claude 는 판단만, Jira 쓰기는 셸.** Jira 토큰이 Claude 에게 닿지 않게 네 겹으로 막는다
+  - 워크플로 전체 `env` 가 아니라 Jira 를 부르는 셸 단계의 `env` 에만 둔다 (전체에 두면 Claude 단계가 `./gradlew` 로 읽는다)
+  - executor 는 Claude 뒤의 Jira 단계를 **별도 잡(`report`)** 으로 뺀다. 같은 러너에 두면 Claude 가 `./gradlew` 로 실행한 코드가 워크스페이스 스크립트·`$GITHUB_ENV`·`$GITHUB_PATH` 를 바꿔 뒤 단계를 조작할 수 있다. 넘기는 것은 질문 파일(데이터)뿐
+  - PR 에서 도는 `jira-sync`·`pr-review` 는 `.github/scripts` 를 **main 에서** 받아 실행한다. PR 브랜치(Claude 가 만든 것 포함)가 스크립트를 바꿔도 토큰과 함께 실행되지 않게
+  - 트리아지는 Claude(Write 도구) 뒤에 워크스페이스를 되돌린 다음 Jira 단계를 돈다
+  - 남는 위험: `CLAUDE_CODE_OAUTH_TOKEN`·`GITHUB_TOKEN` 은 claude-code-action 구조상 Claude 단계에 있다. 티켓은 본인만 쓰고 푸시는 본인·Claude 앱만 하므로 받아들인다 생성 개수·형식을 셸이 검증하므로 모델이 규칙을 무시해도 결과가 틀어지지 않는다
 - **멈춤·되돌림 판단은 프롬프트가 아니라 셸에서.** 중복 실행, manual, 선행 작업, Draft 강제, 열린 질문 → question 전환이 모두 셸이다. 프롬프트 규칙은 모델이 어길 수 있다
 - **분해 기준은 `/plan` 과 같다.** PR 하나 = 파일 3~8개, 새 테이블 1개 이하, 외부 연동 1개 이하. 하위 작업 하나 = PR 하나
 - **Automation 규칙은 2개만.** Jira Free 는 사이트 전체 월 150 steps(동시 5). 규칙 1회 ≈ 2 steps, 티켓당 약 4 steps → 월 35티켓 안팎. 나머지 전이는 Actions 가 REST 로 한다
