@@ -101,8 +101,8 @@ Jira 티켓을 Claude 가 분석(그대로 / 분해 / 질문)하고, 사람이 �
 | 워크플로 반영 | ✅ PR #5 머지, jira-sync 가 SCRUM-29 를 완료로 옮김 |
 | Secret scanning·Push protection | ✅ 켜져 있음 |
 | 라벨 `manual` (24·25·26·11·16) | ✅ |
-| Jira Automation A1·A2 + GitHub fine-grained PAT | A1 ✅ (SCRUM-32 로 전환 → 트리아지 → 질문 확인) · A2 ⬜ 확인 전 |
-| 테스트 티켓으로 확인 절차 | ⬜ SCRUM-30(keep)·31(split)·32(question), 라벨 `test-automation` |
+| Jira Automation A1·A2 + GitHub fine-grained PAT | ✅ A1·A2 모두 상태 전환만으로 동작 확인 |
+| 테스트 티켓으로 확인 절차 | ✅ 2026-09-28, 아래 "확인 결과" |
 
 ### Jira Automation 규칙
 
@@ -124,12 +124,21 @@ PAT 는 fine-grained, 이 저장소만, Contents: Read and write, 만료일 설�
 2. dry-run (Jira 안 건드림): `.github/scripts/triage-apply.sh propose SCRUM-99 sample.json --dry-run`, `… create …`. skip 검사: `./gradlew build` 후 `.github/scripts/check-skipped.sh`
 3. 테스트 티켓(에픽 SCRUM-5 아래, 라벨 `test-automation`)을 `분석 요청` 으로
    - 작은 것 → keep, `승인 대기` + 코멘트
-   - 큰 것 → 분해안 코멘트, 라벨 `split-proposed`, `승인 대기`, **하위 작업은 아직 없음.** `승인` → 하위 작업·Blocks 링크, 부모 `진행 중` + `split`. **Blocks 방향이 선행 → 후행인지 화면에서 확인** (반대면 `jira.sh block` 의 두 키를 바꾼다)
+   - 큰 것 → 분해안 코멘트, 라벨 `split-proposed`, `승인 대기`, **하위 작업은 아직 없음.** `승인` → 하위 작업·Blocks 링크, 부모 `진행 중` + `split`. Blocks 방향이 선행 → 후행인지 화면에서 확인
    - 모호한 것 / 설명에 답이 없는 조건 → `질문`
    - 부모를 다시 `승인` → 하위 작업이 늘지 않음
 4. keep 티켓 `승인` → 진행 중 → Draft PR → 검토 중, pr-review 에 AC 대조 표. manual 티켓 `승인` → 안 돎. 선행 미완료 하위 작업 `승인` → `승인 대기` 로 되돌려짐
 5. 테스트 PR 머지 → 완료, 마지막 하위 작업 머지 → 부모 완료
 6. 테스트 티켓·브랜치·PR 정리
+
+### 확인 결과 (2026-09-28)
+
+| 케이스 | 티켓 | 결과 |
+|---|---|---|
+| question | SCRUM-32 | A1 → 트리아지가 모호한 점 4개를 질문으로 남기고 `질문` |
+| split | SCRUM-31 | 인수 조건 10개·하위 작업 5개 제안, 이 단계에서는 하위 작업 없음. 승인 → A2 → SCRUM-33~37 생성, 부모 `진행 중` + `split` |
+| keep | SCRUM-30 | 인수 조건 4개 → 승인 → A2 → Claude 가 README 한 줄 수정, **Draft PR #8** (권한 거부 0, 13턴). 사람이 Ready → 머지 |
+| 실패 경로 | SCRUM-30·31 | 턴 초과(트리아지 15턴)·편집 권한 없음(executor) 모두 Jira 코멘트 + `질문` 으로 돌아왔다 |
 
 ## 알려진 동작과 함정
 
@@ -138,4 +147,8 @@ PAT 는 fine-grained, 이 저장소만, Contents: Read and write, 만료일 설�
 - **Ruleset 은 대상 브랜치를 지정해야 적용된다.** 비워 두면 active 여도 `main` 에 걸리는 규칙이 0개다. `rules/branches/main` 으로 실제 적용을 확인한다
 - **Jira API 토큰은 scope 없는 것.** scope 토큰은 `api.atlassian.com/ex/jira/<cloudId>` 경유라 사이트 주소 호출과 맞지 않는다
 - **브랜치 검사는 끝을 본다.** `feature/SCRUM-1*` 은 SCRUM-12 에도 걸린다 → `(feature|fix)/KEY(-|$)`
-- Claude 앱이 연 PR 에 `jira-sync` 가 도는지는 확인 필요. 안 돌아도 executor 가 `검토 중` 으로 옮긴다
+- Claude 앱이 연 PR 에도 `jira-sync` 가 돈다 (PR #8 로 확인). executor 도 `검토 중` 으로 옮기므로 둘이 겹치는데, 이미 그 상태면 `jira.sh transition` 이 아무것도 안 한다
+- **실행 중인 티켓을 지우면** executor·jira-sync 의 Jira 단계가 404 로 실패한다. PR 은 남는다. 테스트 티켓은 끝까지 확인한 뒤 지운다
+- **Blocks 링크 생성 요청에서는 `inwardIssue` 가 막는 쪽**이다(조회 응답과 반대로 읽힌다). 처음에 거꾸로 만들어 PR #7 에서 고쳤다
+- executor·claude-mention 은 `--allowedTools` 에 `Edit,Write` 가 없으면 파일을 못 고치고, 권한 거부만 반복하다 PR 없이 끝난다 (PR #7)
+- Atlassian MCP 에는 이슈 삭제가 없다. 테스트 티켓은 완료로 닫거나 Jira 화면에서 지운다
