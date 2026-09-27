@@ -118,6 +118,7 @@ PG 장애 주입 (WireMock 기준. 토스 응답 형태를 흉내):
 | G8 (SCRUM-23) | 워크플로 3개가 참조하는 `CLAUDE.md` 부재 | ✅ 추가 |
 | G9 (SCRUM-23) | 빈 `modules/search` | ✅ 제거, ADR-012 |
 | G10 (SCRUM-25) | `PaymentApprovalRecorder.lockOrCreate` 의 "insert 경쟁은 UNIQUE 가 정리한다" 복구 경로가 동작하지 않는다. UNIQUE 위반 뒤 같은 트랜잭션에서 다시 조회하면 Hibernate 세션이 깨져 있다(`HHH000099 AssertionFailure`, PostgreSQL 은 트랜잭션도 abort). `PaymentFlowTest` 동시 8건 중 6건이 이 경로로 오류를 냈다(테스트 로그). 승인은 1건만 기록돼 돈은 맞지만, 경쟁에서 진 요청은 500 을 받는다. 테스트가 `errors` 를 허용해 가려져 있었다 | 확인됨 → Phase 1 (행을 승인 전에 별도 트랜잭션으로 먼저 만들거나 `INSERT … ON CONFLICT DO NOTHING` 후 `FOR UPDATE`) |
+| G11 | `pr-review` 가 실제로 리뷰를 남기지 못하고 있다. claude-code-action 은 Bash 명령을 기본으로 막는데 워크플로에 허용 목록(`--allowedTools`)이 없어, `gh pr diff`·`gh pr comment` 가 거부된다(런 로그의 `permission_denials_count` 4~5). 그래도 런은 "성공"으로 끝나 PR #1·#3 에 리뷰 코멘트가 0건이다. `jira-executor`(gradle·git·`gh pr create` 필요)와 `claude-mention` 도 같은 설정이라 켜도 같은 이유로 실패한다 | 확인됨 → 워크플로 수정은 사람이 직접 (CLAUDE.md 규칙) |
 
 ## 백로그 (시간이 남으면)
 
