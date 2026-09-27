@@ -25,6 +25,10 @@ jobs:
       - name: Architecture rules
         run: ./gradlew :arch-test:test --no-daemon
 
+      # skip 은 통과가 아니다 (CLAUDE.md, G1). 하나라도 있으면 실패
+      - name: No skipped tests
+        run: .github/scripts/check-skipped.sh
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4

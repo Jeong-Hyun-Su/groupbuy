@@ -1,0 +1,66 @@
+name: jira-sync
+
+# PR 상태를 Jira 에 옮긴다. 사람이 연 PR 도 같은 흐름을 탄다.
+#   열림 → 검토 중,  머지 → 완료 (하위 작업이면 형제가 전부 끝났을 때 부모도 완료)
+# Jira Automation 실행 한도를 쓰지 않으려고 Actions 에서 한다.
+# jira-executor 도 PR 을 만든 뒤 검토 중으로 옮긴다 — Claude 앱이 연 PR 에 이 워크플로가
+# 안 돌 수도 있어서 일부러 겹쳐 두었다. 이미 그 상태면 jira.sh 가 아무것도 안 한다.
+
+on:
+  pull_request:
+    types: [opened, reopened, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jira-sync-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  JIRA_BASE_URL: https://ikerhold1572.atlassian.net
+  JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # 머지 없이 닫힌 PR 은 건드리지 않는다
+    if: github.event.action != 'closed' || github.event.pull_request.merged
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: 이슈 키 찾기
+        id: key
+        env:
+          HEAD: ${{ github.event.pull_request.head.ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          key=$(printf '%s\n%s\n' "$HEAD" "$TITLE" | grep -oE 'SCRUM-[0-9]+' | head -1 || true)
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          [ -n "$key" ] || echo "이슈 키가 없는 PR 이다. 건너뛴다."
+
+      - name: Jira 전이
+        if: steps.key.outputs.key != ''
+        env:
+          KEY: ${{ steps.key.outputs.key }}
+          MERGED: ${{ github.event.pull_request.merged }}
+        run: |
+          if [ "$MERGED" != "true" ]; then
+            .github/scripts/jira.sh transition "$KEY" "검토 중"
+            exit 0
+          fi
+
+          .github/scripts/jira.sh transition "$KEY" "완료"
+
+          parent=$(.github/scripts/jira.sh get "$KEY" issuetype,parent |
+            jq -r 'if .fields.issuetype.subtask then .fields.parent.key else empty end')
+          [ -n "$parent" ] || exit 0
+          left=$(.github/scripts/jira.sh get "$parent" subtasks |
+            jq '[.fields.subtasks[] | select(.fields.status.statusCategory.key != "done")] | length')
+          if [ "$left" -eq 0 ]; then
+            .github/scripts/jira.sh transition "$parent" "완료"
+          fi
