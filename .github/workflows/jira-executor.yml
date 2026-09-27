@@ -51,7 +51,11 @@ jobs:
         if: steps.guard.outputs.skip == 'false'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: "--max-turns 25 --model sonnet"
+          # Bash 는 기본으로 막혀 있다. 여기 적은 명령만 쓸 수 있다 (SCRUM-29).
+          # main 직접 푸시는 브랜치 보호(PR 필수 + build 필수)가 막는다.
+          claude_args: >-
+            --max-turns 30 --model sonnet
+            --allowedTools "Bash(./gradlew:*),Bash(git:*),Bash(gh pr create:*),Bash(gh issue create:*)"
           prompt: |
             Jira 이슈 ${{ github.event.client_payload.key }} 를 구현한다.
 
@@ -60,7 +64,7 @@ jobs:
             ${{ github.event.client_payload.description }}
 
             규칙:
-            1. CLAUDE.md 와 docs/design 의 설계서를 기준으로 삼는다.
+            1. CLAUDE.md, docs/plan.md(범위·완료 기준), docs/design 의 설계서를 기준으로 삼는다.
             2. feature/${{ github.event.client_payload.key }} 브랜치에서 작업한다.
             3. 테스트를 함께 작성하고 ./gradlew build 를 통과시킨 뒤 커밋한다.
             4. gh pr create 로 PR 을 연다. 제목 앞에 이슈 키를 붙인다.
@@ -68,7 +72,8 @@ jobs:
             5. 절대 머지하지 않는다. main 에 직접 푸시하지 않는다.
             6. .github/workflows/ 아래 파일은 수정하지 않는다.
             7. 요구사항이 불명확하거나, 설계서와 이슈 내용이 어긋나면 구현을 멈춘다.
-               PR 을 만들지 말고 gh issue comment 로 무엇이 불명확한지 남긴 뒤 종료한다.
+               PR 을 만들지 말고 gh issue create --title "[질문] ${{ github.event.client_payload.key }} <요약>" 로
+               무엇이 불명확한지 남긴 뒤 종료한다. (Jira 이슈에는 대응하는 GitHub 이슈가 없어 comment 할 곳이 없다)
                애매한 채로 만든 PR 은 치우는 비용이 만드는 비용보다 크다.
 
       # 실패하면 이슈가 Approved 에 방치된다. 라벨을 근거로 Jira Automation 이 To Do 로 되돌린다.
