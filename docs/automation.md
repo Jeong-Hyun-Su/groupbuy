@@ -101,7 +101,7 @@ Jira 티켓을 Claude 가 분석(그대로 / 분해 / 질문)하고, 사람이 �
 | 워크플로 반영 | ✅ PR #5 머지, jira-sync 가 SCRUM-29 를 완료로 옮김 |
 | Secret scanning·Push protection | ✅ 켜져 있음 |
 | 라벨 `manual` (24·25·26·11·16) | ✅ |
-| Jira Automation A1·A2 + GitHub fine-grained PAT | ⬜ |
+| Jira Automation A1·A2 + GitHub fine-grained PAT | A1 ✅ (SCRUM-32 로 전환 → 트리아지 → 질문 확인) · A2 ⬜ 확인 전 |
 | 테스트 티켓으로 확인 절차 | ⬜ SCRUM-30(keep)·31(split)·32(question), 라벨 `test-automation` |
 
 ### Jira Automation 규칙
@@ -110,7 +110,8 @@ Jira 티켓을 Claude 가 분석(그대로 / 분해 / 질문)하고, 사람이 �
 PAT 는 fine-grained, 이 저장소만, Contents: Read and write, 만료일 설정 후 캘린더에 갱신 알림.
 - JQL 의 업무 유형은 **ID 로** 쓴다. 화면 이름(작업)은 번역명이라 JQL 이 못 찾는다("'작업' 값이 'issuetype' 필드에 존재하지 않습니다")
 - `labels not in (manual)` 만 쓰면 라벨이 없는 티켓이 빠진다. `labels is EMPTY OR` 를 붙인다
-- 헤더에 `X-GitHub-Api-Version: 2022-11-28`, `Authorization` 은 숨김. 감사 로그에서 응답 204 면 성공
+- 헤더 4개: `Authorization: Bearer <PAT>`(숨김), `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2022-11-28`, `Content-Type: application/json`. 감사 로그에서 응답 204 면 성공
+- 401 `Requires authentication` = 헤더가 아예 안 갔다(행 미저장, 이름·값 칸 혼동). `Bad credentials` = 토큰 값이 틀렸다. PAT 자체는 터미널 `curl` 로 204 가 나오는지 먼저 가린다
 
 | 규칙 | 트리거 | 조건 | 본문 |
 |---|---|---|---|
