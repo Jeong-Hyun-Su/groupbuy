@@ -1,0 +1,99 @@
+name: jira-triage
+
+# Jira 이슈가 '분석 요청' 으로 전이되면 Jira Automation(A1) 이 repository_dispatch 를 쏜다.
+# Claude 는 티켓을 그대로 둘지(keep) / 하위 작업으로 쪼갤지(split) / 질문할지(question) 판단만 하고
+# triage.json 에 쓴다. Jira 쓰기는 셸(.github/scripts/triage-apply.sh)이 검증 후 한다.
+# split 이어도 여기서는 하위 작업을 만들지 않는다. 사람이 '승인' 으로 옮기면(게이트 2) jira-executor 가 만든다.
+# Jira 토큰을 Claude 도구에 넘기지 않기 위해서다.
+
+on:
+  repository_dispatch:
+    types: [jira-triage]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: jira-${{ github.event.client_payload.key }}
+  cancel-in-progress: false
+
+env:
+  JIRA_BASE_URL: https://ikerhold1572.atlassian.net
+  JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+  KEY: ${{ github.event.client_payload.key }}
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # 티켓 본문은 payload 가 아니라 Jira 에서 직접 읽는다. 길이 제한·JSON 이스케이프 문제를 피한다
+      - name: 티켓 읽기
+        run: |
+          [[ "$KEY" =~ ^SCRUM-[0-9]+$ ]] || { echo "잘못된 키: $KEY" >&2; exit 1; }
+          mkdir -p .triage
+          .github/scripts/jira.sh get "$KEY" summary,description,issuetype,parent,subtasks > .triage/issue.json
+          jq -r '"# " + .key + " " + .fields.summary + "\n\n유형: " + .fields.issuetype.name +
+                 "\n에픽: " + ((.fields.parent.key // "-") + " " + (.fields.parent.fields.summary // "")) +
+                 "\n기존 하위 작업: " + (.fields.subtasks | length | tostring) +
+                 "\n\n" + (.fields.description // "(설명 없음)")' .triage/issue.json > .triage/ticket.md
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Bash 는 열지 않는다. 읽고 triage.json 하나만 쓴다
+          claude_args: >-
+            --max-turns 15 --model opus
+            --allowedTools "Read,Glob,Grep,Write"
+          prompt: |
+            .triage/ticket.md 의 Jira 티켓을 트리아지한다. 코드는 고치지 않는다.
+            CLAUDE.md, docs/plan.md, docs/design/ 의 설계서, 필요하면 관련 코드를 읽고 판단한다.
+
+            판단:
+            - keep: PR 하나로 끝난다. 기준은 파일 3~8개, 새 테이블 1개 이하, 외부 연동 1개 이하.
+            - split: 기준을 넘는다. 하위 작업 2~6개로 쪼갠다. 하나 = PR 하나. 부모의 인수 조건이 하위 작업 어딘가에 빠짐없이 들어가야 한다.
+              순서는 DB → 도메인 → 서비스 → API. 각 하위 작업에 인수 조건과 참고 설계 절
+              (예: "설계서 › 7.2 결제 승인")을 붙이고, 먼저 머지돼야 하는 하위 작업 번호(0부터)를 depends_on 에 쓴다.
+            - question: 요구사항이 불명확하거나 docs/plan.md·설계서와 어긋난다. 추측해서 채우지 않는다.
+              애매한 채로 만든 결과는 치우는 비용이 만드는 비용보다 크다.
+
+            인수 조건은 "AC1 …", "AC2 …" 처럼 번호를 붙이고, 각각 테스트 하나로 참/거짓을 가릴 수 있게 쓴다.
+            리뷰가 이 번호로 테스트를 대조한다.
+
+            self_check: 결과를 쓰기 전에 스스로 점검한다.
+            - ac_complete: 티켓 설명의 요구가 인수 조건에 빠짐없이 들어갔나
+            - granularity_ok: keep 이면 PR 하나 기준 안인가, split 이면 하위 작업 각각이 기준 안인가
+            - verifiable: 인수 조건마다 테스트로 확인할 수 있나
+            - open_questions: 답이 없으면 구현을 시작할 수 없는 질문. 하나라도 있으면 셸이 question 으로 돌린다
+
+            manual_recommended: 불변식 R1~R8 이나 CLAUDE.md 의 Don't 유형(PG 부작용 후 롤백,
+            상태 점유, 실패 두 갈래, 같은 클래스 @Transactional 호출)을 건드리면 true.
+
+            결과를 .triage/triage.json 에 아래 형식 그대로 쓰고 끝낸다. 다른 파일은 쓰지 않는다.
+            {
+              "decision": "keep | split | question",
+              "reason": "판단 이유 (한국어, 3~5문장)",
+              "acceptance_criteria": ["AC1 ..."],
+              "affected_files": ["경로"],
+              "risks": ["R4 ... 처럼 불변식 번호와 함께"],
+              "manual_recommended": false,
+              "self_check": {"ac_complete": true, "granularity_ok": true, "verifiable": true, "open_questions": []},
+              "subtasks": [{"title": "", "description": "", "acceptance_criteria": [], "design_ref": "", "depends_on": []}],
+              "questions": ["질문"]
+            }
+
+      - name: Jira 에 반영
+        run: .github/scripts/triage-apply.sh propose "$KEY" .triage/triage.json
+
+      - name: 실패 표시
+        if: failure()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          printf 'h3. Claude 트리아지 실패\n런: %s\n\n원인을 확인하고 다시 분석 요청으로 옮긴다.\n' "$RUN_URL" > /tmp/fail.txt
+          .github/scripts/jira.sh comment "$KEY" /tmp/fail.txt || true
+          .github/scripts/jira.sh transition "$KEY" "질문" || true

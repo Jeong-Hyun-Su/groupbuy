@@ -32,6 +32,28 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 티켓의 인수 조건(AC)을 읽어 둔다. 하위 작업은 설명에, 나머지는 트리아지 첨부(triage.json)에 있다.
+      # Jira 를 못 읽어도 리뷰는 한다
+      - name: 인수 조건 읽기
+        env:
+          JIRA_BASE_URL: https://ikerhold1572.atlassian.net
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          HEAD: ${{ github.event.pull_request.head.ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          mkdir -p .review
+          echo "(인수 조건 없음 — 이 항목은 건너뛴다)" > .review/ac.md
+          key=$(printf '%s\n%s\n' "$HEAD" "$TITLE" | grep -oE 'SCRUM-[0-9]+' | head -1 || true)
+          [ -n "$key" ] && [ -n "$JIRA_API_TOKEN" ] || exit 0
+          issue=$(.github/scripts/jira.sh get "$key" summary,description,issuetype) || exit 0
+          if [ "$(jq -r '.fields.issuetype.subtask' <<<"$issue")" = "true" ]; then
+            jq -r '"# " + .key + " " + .fields.summary + "\n\n" + (.fields.description // "")' <<<"$issue" > .review/ac.md
+          elif .github/scripts/jira.sh attachment "$key" triage.json .review/triage.json; then
+            { jq -r '"# " + .key + " " + .fields.summary' <<<"$issue"
+              jq -r '.acceptance_criteria[] | "* " + .' .review/triage.json; } > .review/ac.md
+          fi
+
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -58,6 +80,10 @@ jobs:
             5. 같은 클래스 안에서 @Transactional 메서드를 호출하는 코드.
                Spring 프록시를 타지 않아 트랜잭션이 열리지 않는다.
             6. 비즈니스 불변식(R1~R8)을 깨뜨릴 수 있는 변경인데 테스트가 없는 경우.
+
+            그다음 .review/ac.md 의 인수 조건(AC 번호)을 하나씩 대조한다.
+            코멘트 끝에 "AC 대조" 표를 붙인다: AC 번호 | 이를 증명하는 테스트(파일:메서드) | 없음/부족.
+            테스트가 없는 AC 는 지적으로 친다. 인수 조건이 없으면 표를 생략한다.
 
             리뷰 규칙:
             - 확신이 있는 것만 쓴다. 추측성 지적은 쓰지 않는다.

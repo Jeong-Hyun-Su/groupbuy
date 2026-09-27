@@ -11,3 +11,7 @@ out/
 
 # Claude Code 개인 설정
 .claude/settings.local.json
+
+# 자동화 워크플로 작업 파일
+/.jira/
+/.triage/
