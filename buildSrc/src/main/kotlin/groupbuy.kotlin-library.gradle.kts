@@ -37,6 +37,11 @@ allOpen {
 // 플러그인 버전을 단일 진실로 삼아 BOM 의 값을 덮어쓴다.
 extra["kotlin.version"] = getKotlinPluginVersion()
 
+// Boot 3.5.6 이 관리하는 Testcontainers 1.21.3 은 Docker API 버전을 감지하지 못하면 1.32 로 폴백하는데,
+// Docker 29(OrbStack) 는 1.40 미만을 거부한다. 통합 테스트가 disabledWithoutDocker = true 라서 실패 대신
+// 조용히 skip 된다 (2026-09-28 재현: Docker 가 떠 있는데 17개 전부 skip). 1.21.4 부터 폴백이 1.44 다.
+extra["testcontainers.version"] = "1.21.4"
+
 dependencyManagement {
     imports {
         // buildSrc/build.gradle.kts 의 Versions.springBoot 와 반드시 동일하게 유지

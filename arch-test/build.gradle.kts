@@ -10,7 +10,6 @@ dependencies {
     testImplementation(project(":modules:payment"))
     testImplementation(project(":modules:settlement"))
     testImplementation(project(":modules:realtime"))
-    testImplementation(project(":modules:search"))
     testImplementation(project(":apps:api"))
     testImplementation(project(":apps:worker"))
 
