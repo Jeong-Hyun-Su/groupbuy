@@ -100,9 +100,9 @@ Jira 티켓을 Claude 가 분석(그대로 / 분해 / 질문)하고, 사람이 �
 | 시크릿 `JIRA_EMAIL`·`JIRA_API_TOKEN` (scope 없는 API 토큰) | ✅ PR #5 에서 jira-sync·pr-review 가 실제 인증 |
 | 워크플로 반영 | ✅ PR #5 머지, jira-sync 가 SCRUM-29 를 완료로 옮김 |
 | Secret scanning·Push protection | ✅ 켜져 있음 |
-| 라벨 `manual` (24·25·26·11·16) | ⬜ **A2 연결 전에** |
+| 라벨 `manual` (24·25·26·11·16) | ✅ |
 | Jira Automation A1·A2 + GitHub fine-grained PAT | ⬜ |
-| 테스트 티켓으로 확인 절차 | ⬜ |
+| 테스트 티켓으로 확인 절차 | ⬜ SCRUM-30(keep)·31(split)·32(question), 라벨 `test-automation` |
 
 ### Jira Automation 규칙
 
