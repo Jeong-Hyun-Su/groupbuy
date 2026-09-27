@@ -19,6 +19,29 @@
 | Elasticsearch | 도메인 필연성이 가장 약하다 (설계서 14장 절단 순서 1번) | PostgreSQL 목록·검색 유지 — [ADR-012](adr/012-search-on-postgresql.md) |
 | AWS (기본값) | 비용·시간 | 로컬 k3d. 시간이 남으면 EC2 |
 
+## Jira 연결
+
+이슈는 Jira `SCRUM` 프로젝트에서 관리한다. Phase = 에픽이다: Phase 1 `SCRUM-5`, 2 `SCRUM-6`, 3 `SCRUM-7`, 4 `SCRUM-8`, 5 `SCRUM-9`.
+브랜치 `feature/SCRUM-N-요약`(문서·설정은 `chore/…`), 커밋·PR 제목 `SCRUM-N: 요약`. Phase 3~5 티켓은 앞 Phase 가 끝날 때 쪼갠다.
+
+Phase 1 티켓:
+
+| 티켓 | 내용 |
+|---|---|
+| SCRUM-23 | 재개 준비 (PR #3) |
+| SCRUM-24 | G2 |
+| SCRUM-25 | G10 |
+| SCRUM-26 | G3 |
+| SCRUM-27 | G5 |
+| SCRUM-12 | 선점 만료 상한 |
+| SCRUM-13 | JWT |
+| SCRUM-14 | springdoc·JaCoCo |
+| SCRUM-28 | E2E 요청 파일 |
+| SCRUM-11 | 트러블슈팅 기록 |
+| SCRUM-16 | LT-01 |
+
+Phase 2 티켓: SCRUM-17 ~ 22.
+
 ## Phase 별 계획
 
 ### Phase 1 마무리 (약 5일)
@@ -85,16 +108,16 @@ PG 장애 주입 (WireMock 기준. 토스 응답 형태를 흉내):
 
 | # | 내용 | 상태 |
 |---|---|---|
-| G1 | Testcontainers 1.21.3 + Docker 29 → 통합 테스트 17개가 **Docker 가 떠 있어도 skip** (`disabledWithoutDocker`) | ✅ 1.21.4 고정으로 해결. 로컬 17개 실행·통과 확인 |
-| G2 | 선점 만료 ↔ 결제 확정 경쟁: `ReservationExpiryService` 는 딜 락·`@Version` 없이 RESERVED 를 읽어 `expire()` 한다. `confirmByOrder` 는 `now` 를 **딜 락을 기다리기 전에** 잡으므로, 락 대기가 길면 만료 시각을 넘겨 확정할 수 있다. 그 사이 스캐너가 RESERVED 로 읽었다면 확정 커밋 뒤 행 락이 풀리는 대로 EXPIRED 로 덮어쓴다(READ COMMITTED). 결과: 결제는 APPROVED 인데 참여는 빠지고 환불도 없다 (설계서 4.2 "주인 없는 돈") | 확인 필요 → Phase 1 (재현 테스트 먼저) |
-| G3 | 카드 거절(`FAILED`) 뒤 같은 주문으로 재결제가 승인되면 `approve` 가 상태 전이 예외 → 승인 기록 롤백. 웹훅도 같은 예외를 삼킨다. 토스의 orderId 재사용 규칙을 **공식 문서로 확인** 후 판단 | 확인 필요 → Phase 1 |
+| G1 (SCRUM-23) | Testcontainers 1.21.3 + Docker 29 → 통합 테스트 17개가 **Docker 가 떠 있어도 skip** (`disabledWithoutDocker`) | ✅ 1.21.4 고정으로 해결. 로컬 17개 실행·통과 확인 |
+| G2 (SCRUM-24) | 선점 만료 ↔ 결제 확정 경쟁: `ReservationExpiryService` 는 딜 락·`@Version` 없이 RESERVED 를 읽어 `expire()` 한다. `confirmByOrder` 는 `now` 를 **딜 락을 기다리기 전에** 잡으므로, 락 대기가 길면 만료 시각을 넘겨 확정할 수 있다. 그 사이 스캐너가 RESERVED 로 읽었다면 확정 커밋 뒤 행 락이 풀리는 대로 EXPIRED 로 덮어쓴다(READ COMMITTED). 결과: 결제는 APPROVED 인데 참여는 빠지고 환불도 없다 (설계서 4.2 "주인 없는 돈") | 확인 필요 → Phase 1 (재현 테스트 먼저) |
+| G3 (SCRUM-26) | 카드 거절(`FAILED`) 뒤 같은 주문으로 재결제가 승인되면 `approve` 가 상태 전이 예외 → 승인 기록 롤백. 웹훅도 같은 예외를 삼킨다. 토스의 orderId 재사용 규칙을 **공식 문서로 확인** 후 판단 | 확인 필요 → Phase 1 |
 | G4 | 환불 실패 시 FAILED 딜·미정산 SUCCEEDED 딜을 다시 집는 경로 없음 | Phase 3 환불 워커 |
-| G5 | `PaymentFlowTest` 의 "confirm 과 webhook 동시 도착" 테스트가 실제로는 confirm 만 호출 (Fake 의 조회가 null) | Phase 1 |
+| G5 (SCRUM-27) | `PaymentFlowTest` 의 "confirm 과 webhook 동시 도착" 테스트가 실제로는 confirm 만 호출 (Fake 의 조회가 null) | Phase 1 |
 | G6 | 설계 v0.2 와 코드 불일치: 만료 시각(#4), SETTLED 의미(#9), OPEN 강제 중단(#11) | Phase 2·3·5 |
 | G7 | 부하 규모 비현실 | 위 "부하 규모 규칙" |
-| G8 | 워크플로 3개가 참조하는 `CLAUDE.md` 부재 | ✅ 추가 |
-| G9 | 빈 `modules/search` | ✅ 제거, ADR-012 |
-| G10 | `PaymentApprovalRecorder.lockOrCreate` 의 "insert 경쟁은 UNIQUE 가 정리한다" 복구 경로가 동작하지 않는다. UNIQUE 위반 뒤 같은 트랜잭션에서 다시 조회하면 Hibernate 세션이 깨져 있다(`HHH000099 AssertionFailure`, PostgreSQL 은 트랜잭션도 abort). `PaymentFlowTest` 동시 8건 중 6건이 이 경로로 오류를 냈다(테스트 로그). 승인은 1건만 기록돼 돈은 맞지만, 경쟁에서 진 요청은 500 을 받는다. 테스트가 `errors` 를 허용해 가려져 있었다 | 확인됨 → Phase 1 (행을 승인 전에 별도 트랜잭션으로 먼저 만들거나 `INSERT … ON CONFLICT DO NOTHING` 후 `FOR UPDATE`) |
+| G8 (SCRUM-23) | 워크플로 3개가 참조하는 `CLAUDE.md` 부재 | ✅ 추가 |
+| G9 (SCRUM-23) | 빈 `modules/search` | ✅ 제거, ADR-012 |
+| G10 (SCRUM-25) | `PaymentApprovalRecorder.lockOrCreate` 의 "insert 경쟁은 UNIQUE 가 정리한다" 복구 경로가 동작하지 않는다. UNIQUE 위반 뒤 같은 트랜잭션에서 다시 조회하면 Hibernate 세션이 깨져 있다(`HHH000099 AssertionFailure`, PostgreSQL 은 트랜잭션도 abort). `PaymentFlowTest` 동시 8건 중 6건이 이 경로로 오류를 냈다(테스트 로그). 승인은 1건만 기록돼 돈은 맞지만, 경쟁에서 진 요청은 500 을 받는다. 테스트가 `errors` 를 허용해 가려져 있었다 | 확인됨 → Phase 1 (행을 승인 전에 별도 트랜잭션으로 먼저 만들거나 `INSERT … ON CONFLICT DO NOTHING` 후 `FOR UPDATE`) |
 
 ## 백로그 (시간이 남으면)
 
