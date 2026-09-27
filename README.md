@@ -4,6 +4,7 @@
 
 이 프로젝트가 증명하려는 것: 결제·정산 정합성, 대규모 트래픽에서의 동시성 제어, 실시간 전파, 이벤트 기반 아키텍처, 운영(k8s·CI/CD).
 설계 전문은 [docs/design/공동구매_플랫폼_설계서.md](docs/design/공동구매_플랫폼_설계서.md), 주요 결정은 [docs/adr](docs/adr).
+**재개 계획(순서·범위·완료 기준·진행)은 [docs/plan.md](docs/plan.md)** 가 기준이다 (2026-09-28).
 
 ## 상태
 
@@ -13,14 +14,15 @@
 | 2 | 동시성 — 정원 초과 0건 | ⏳ |
 | 3 | 결제 정합성 — 돈이 안 맞는 경우 0건 | ⏳ |
 | 4 | 실시간 — 만 명이 같은 게이지를 본다 | ⏳ |
-| 5 | 운영 — 정산·검색·k8s·CD | ⏳ |
+| 5 | 운영 — 정산·대조·k8s·CD | ⏳ |
 
 CI(`.github/workflows/ci.yml` — 빌드·테스트·ArchUnit)는 Phase 1 부터 돈다. Phase 5 는 배포(CD)다.
+React 클라이언트와 Elasticsearch 는 범위에서 뺐다 → [docs/plan.md](docs/plan.md#범위에서-뺀-것), [ADR-012](docs/adr/012-search-on-postgresql.md).
 
 ## 시작하기
 
 ```bash
-# 1. 빌드 + 테스트 (Docker 없어도 OK — Testcontainers 테스트만 자동 skip. 첫 실행은 의존성 다운로드로 수 분 소요)
+# 1. 빌드 + 테스트 (Docker 필요. 첫 실행은 의존성 다운로드로 수 분 소요)
 ./gradlew build
 
 # 2. 실행 (PostgreSQL 필요)
@@ -37,8 +39,8 @@ cd infra && docker compose up -d && cd ..
 > **빌드 메모 (2026-09-16 검증)**
 > - Kotlin 플러그인 버전은 `buildSrc/build.gradle.kts` 한 곳에서만 관리한다. Spring Boot BOM 이 강제하는 `kotlin.version` 은
 >   컨벤션 플러그인이 플러그인 버전으로 덮어쓴다 — 이 둘이 어긋나면 컴파일러 도구 버전이 갈려 빌드가 깨진다.
-> - Docker 가 없으면 Testcontainers 기반 테스트(`apps/api`)는 **건너뛴다**. CI(ubuntu-latest) 에서는 항상 실행된다.
->   로컬에서 통합 테스트까지 돌리려면 Docker Desktop 또는 colima 를 설치하라.
+> - Docker 가 없으면 Testcontainers 기반 테스트(`apps/api`, `apps/worker`)는 **건너뛴다**. skip 은 통과가 아니다. CI(ubuntu-latest) 에서는 항상 실행된다.
+> - Testcontainers 는 1.21.4 로 고정한다 (2026-09-28). Boot 3.5.6 의 1.21.3 은 Docker 29(OrbStack) 와 API 버전이 맞지 않아 **Docker 가 떠 있어도 통합 테스트 17개가 전부 skip** 됐다.
 
 ## 구조
 
@@ -53,13 +55,14 @@ groupbuy/
 │   ├── participation/  선점·참여·취소, Redis 원자 연산 (Phase 2)
 │   ├── payment/        PG 연동, 승인, 환불, 멱등성
 │   ├── settlement/     정산, 원장 대조 (Phase 5)
-│   ├── realtime/       Redis Pub/Sub → SSE (Phase 4)
-│   └── search/         Elasticsearch (Phase 5)
+│   └── realtime/       Redis Pub/Sub → SSE (Phase 4)
 ├── arch-test/          ArchUnit — 모듈 의존 방향·레이어 규칙 강제
 ├── infra/              docker-compose, k6 부하 스크립트, k8s (Phase 5)
 └── docs/
+    ├── plan.md         재개 계획 — 순서·범위·완료 기준·진행
     ├── design/         설계서
     ├── adr/            아키텍처 결정 기록
+    ├── phases/         Phase 결과 (문제 → 예측 → 측정 → 결론)
     └── loadtest/       부하테스트 결과 (13.2 양식)
 ```
 
@@ -69,7 +72,7 @@ groupbuy/
           common
             ▲
    ┌────────┼─────────┐
- deal ◄ participation ◄ payment       settlement · realtime · search
+ deal ◄ participation ◄ payment       settlement · realtime
    ▲        ▲            ▲             (이벤트 컨슈머 전용, 직접 호출 없음)
    └────────┴────────────┴── apps/api, apps/worker (조립·조합)
 ```
@@ -92,7 +95,7 @@ groupbuy/
 - [x] 딜 목록 API (DB 기반, `GET /api/deals?sort=closing_soon|latest&q=&status=&page=&size=`)
 - [x] 승인 후 확정 불가 건 전액 환불 (ADR-07), 롤백된 마감의 재개
 - [ ] Spring Security + JWT (`X-User-Id` 헤더 대체), OpenAPI(springdoc), JaCoCo
-- [ ] React 클라이언트 (목록/상세/참여/마이페이지)
+- ~~React 클라이언트~~ — 범위에서 제외. springdoc + `http/` 요청 파일로 E2E 시나리오 ([plan](docs/plan.md))
 - [x] 사용자·판매자·상품 시드 데이터 (`infra/seed/seed.sql`, 사용자 5,000명 + LT-01 딜)
 - [ ] LT-01 실행 → `docs/loadtest/` 에 붕괴 지점 기록 → Phase 2 동기
 
