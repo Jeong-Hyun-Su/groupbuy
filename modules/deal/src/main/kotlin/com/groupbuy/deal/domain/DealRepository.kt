@@ -18,7 +18,7 @@ interface DealRepository {
     fun findDueToClose(now: Instant, limit: Int): List<Deal>
 
     /**
-     * 목록 조회 (UC-02). Phase 1 은 DB 직접 조회 — Phase 5 에서 Elasticsearch 로 옮긴다.
+     * 목록 조회 (UC-02). PostgreSQL 직접 조회 (ADR-012).
      *
      * @param statuses 비어 있으면 전체
      * @param keyword  제목 부분 일치. null 이면 전체

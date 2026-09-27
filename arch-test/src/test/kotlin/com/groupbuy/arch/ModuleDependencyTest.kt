@@ -11,7 +11,7 @@ import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices
  * 모듈 간 의존 규칙. 설계서 5.3.
  *
  * 허용 방향:  deal ← participation ← payment
- * 이벤트 전용: settlement, realtime, search (비즈니스 모듈을 직접 호출하지 않음)
+ * 이벤트 전용: settlement, realtime (비즈니스 모듈을 직접 호출하지 않음)
  * 공통:       common 은 누구나 의존 가능
  */
 @AnalyzeClasses(
@@ -27,35 +27,34 @@ class ModuleDependencyTest {
         const val PAYMENT = "com.groupbuy.payment.."
         const val SETTLEMENT = "com.groupbuy.settlement.."
         const val REALTIME = "com.groupbuy.realtime.."
-        const val SEARCH = "com.groupbuy.search.."
         const val API_APP = "com.groupbuy.api.."
         const val WORKER_APP = "com.groupbuy.worker.."
 
-        val BUSINESS_MODULES = arrayOf(DEAL, PARTICIPATION, PAYMENT, SETTLEMENT, REALTIME, SEARCH)
+        val BUSINESS_MODULES = arrayOf(DEAL, PARTICIPATION, PAYMENT, SETTLEMENT, REALTIME)
     }
 
     @ArchTest
     @JvmField
     val `deal 은 다른 비즈니스 모듈에 의존하지 않는다`: ArchRule =
         noClasses().that().resideInAPackage(DEAL)
-            .should().dependOnClassesThat().resideInAnyPackage(PARTICIPATION, PAYMENT, SETTLEMENT, REALTIME, SEARCH)
+            .should().dependOnClassesThat().resideInAnyPackage(PARTICIPATION, PAYMENT, SETTLEMENT, REALTIME)
 
     @ArchTest
     @JvmField
     val `participation 은 deal 에만 의존한다`: ArchRule =
         noClasses().that().resideInAPackage(PARTICIPATION)
-            .should().dependOnClassesThat().resideInAnyPackage(PAYMENT, SETTLEMENT, REALTIME, SEARCH)
+            .should().dependOnClassesThat().resideInAnyPackage(PAYMENT, SETTLEMENT, REALTIME)
 
     @ArchTest
     @JvmField
     val `payment 는 deal, participation 에만 의존한다`: ArchRule =
         noClasses().that().resideInAPackage(PAYMENT)
-            .should().dependOnClassesThat().resideInAnyPackage(SETTLEMENT, REALTIME, SEARCH)
+            .should().dependOnClassesThat().resideInAnyPackage(SETTLEMENT, REALTIME)
 
     @ArchTest
     @JvmField
     val `이벤트 전용 모듈은 비즈니스 모듈을 직접 호출하지 않는다`: ArchRule =
-        noClasses().that().resideInAnyPackage(SETTLEMENT, REALTIME, SEARCH)
+        noClasses().that().resideInAnyPackage(SETTLEMENT, REALTIME)
             .should().dependOnClassesThat().resideInAnyPackage(DEAL, PARTICIPATION, PAYMENT)
             .allowEmptyShould(true)   // Phase 4~5 전까지 이 모듈들은 비어 있다
 
@@ -63,21 +62,14 @@ class ModuleDependencyTest {
     @JvmField
     val `settlement 은 다른 이벤트 전용 모듈에 의존하지 않는다`: ArchRule =
         noClasses().that().resideInAPackage(SETTLEMENT)
-            .should().dependOnClassesThat().resideInAnyPackage(REALTIME, SEARCH)
+            .should().dependOnClassesThat().resideInAnyPackage(REALTIME)
             .allowEmptyShould(true)
 
     @ArchTest
     @JvmField
     val `realtime 은 다른 이벤트 전용 모듈에 의존하지 않는다`: ArchRule =
         noClasses().that().resideInAPackage(REALTIME)
-            .should().dependOnClassesThat().resideInAnyPackage(SETTLEMENT, SEARCH)
-            .allowEmptyShould(true)
-
-    @ArchTest
-    @JvmField
-    val `search 는 다른 이벤트 전용 모듈에 의존하지 않는다`: ArchRule =
-        noClasses().that().resideInAPackage(SEARCH)
-            .should().dependOnClassesThat().resideInAnyPackage(SETTLEMENT, REALTIME)
+            .should().dependOnClassesThat().resideInAnyPackage(SETTLEMENT)
             .allowEmptyShould(true)
 
     @ArchTest

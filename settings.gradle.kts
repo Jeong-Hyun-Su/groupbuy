@@ -12,7 +12,6 @@ include(
     "modules:payment",
     "modules:settlement",
     "modules:realtime",
-    "modules:search",
     "apps:api",
     "apps:worker",
     "arch-test",

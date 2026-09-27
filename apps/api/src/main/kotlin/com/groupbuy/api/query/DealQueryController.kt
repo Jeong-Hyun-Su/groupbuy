@@ -26,7 +26,7 @@ class DealQueryController(
     ): DealDetailResponse = dealDetailQuery.get(dealId, userId)
 
     /**
-     * UC-02 딜 목록. Phase 1 은 DB 조회 — Phase 5 에서 search 모듈(Elasticsearch)로 이관한다.
+     * UC-02 딜 목록. PostgreSQL 로 조회한다 (Elasticsearch 는 쓰지 않는다 — ADR-012).
      *
      * `status` 를 여러 번 넘기면 OR 로 묶인다. 기본은 진행 중인 딜(SCHEDULED, OPEN)만 보여준다.
      */

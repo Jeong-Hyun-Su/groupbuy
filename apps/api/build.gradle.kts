@@ -8,7 +8,6 @@ dependencies {
     implementation(project(":modules:participation"))
     implementation(project(":modules:payment"))
     implementation(project(":modules:realtime"))
-    implementation(project(":modules:search"))
 
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
