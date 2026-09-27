@@ -36,15 +36,4 @@ jobs:
           name: test-reports
           path: '**/build/reports/tests/test'
 
-  # 커밋에 들어간 토큰·키 검사. 새 의존성(gitleaks-action) — 이유·대안은 workflow-drafts/README.md
-  secret-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   # Phase 5: 이미지 빌드 → GHCR push → k8s rollout

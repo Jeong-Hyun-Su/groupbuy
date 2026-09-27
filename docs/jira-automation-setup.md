@@ -8,13 +8,10 @@ Claude 는 `.github/workflows/` 를 직접 고치지 않는다(로컬 훅이 막
 | `jira-triage.yml` | 새로 추가 | '분석 요청' → Claude 가 keep/split/question 판단·자기 점검 → 셸이 코멘트·`triage.json` 첨부. **하위 작업은 만들지 않는다** |
 | `jira-executor.yml` | 기존 파일 교체 | `split-proposed` 면 하위 작업만 생성(게이트 2), 아니면 구현. **PR 은 항상 Draft**(게이트 4). manual·선행 작업 가드, 브랜치 검사 `feature|fix/KEY(-…)`, 질문·실패는 Jira 코멘트 + '질문' |
 | `jira-sync.yml` | 새로 추가 | PR 열림 → 검토 중, 머지 → 완료(+부모) |
-| `ci.yml` | 기존 파일 교체 | `build` 잡에 skip 0 검사, 새 잡 `secret-scan`(gitleaks) |
+| `ci.yml` | 기존 파일 교체 | `build` 잡에 skip 0 검사 |
 | `pr-review.yml` | 기존 파일 교체 | Jira 인수 조건을 읽어 AC 번호별 테스트 대조 표를 코멘트에 붙인다 |
 
-**새 의존성 `gitleaks/gitleaks-action@v2`** (CLAUDE.md: 새 의존성은 이유·대안 먼저)
-- 이유: Actions 에 시크릿이 늘었다(Claude·Jira 토큰). Claude 가 커밋을 만들므로 실수로 값이 들어가도 사람이 diff 에서 놓칠 수 있다
-- 대안: GitHub 기본 Secret scanning·Push protection(공개 저장소 무료, Settings → Code security). 설정만 켜면 되고 의존성이 없다 — **이것만으로 충분하면 `secret-scan` 잡은 빼도 된다**
-- 개인 계정은 gitleaks-action 라이선스 키가 필요 없다(조직 계정만 필요)
+**비밀정보 검사**는 CI 잡을 두지 않고 GitHub 기본 Secret scanning·Push protection 을 쓴다 (2026-09-28 둘 다 켜져 있음 확인). 이 저장소에서 새어 나갈 수 있는 값(GitHub·Atlassian·Anthropic 토큰)은 모두 형식이 알려진 토큰이라 기본 기능이 푸시 단계에서 막는다. gitleaks 는 중복이라 뺐다
 
 ## 순서 (위에서부터)
 
@@ -55,7 +52,7 @@ Claude 는 `.github/workflows/` 를 직접 고치지 않는다(로컬 훅이 막
    - 모호한 것 → '질문'
    - 설명에 답이 없는 조건을 넣은 것 → 자기 점검 열린 질문 → '질문'
    - 부모를 다시 '승인' → 하위 작업이 늘지 않음
-4. keep 티켓 '승인' → 진행 중 → **Draft** PR → 검토 중, pr-review 코멘트에 AC 대조 표. CI 에 skip 검사·secret-scan 통과. manual 티켓 '승인' → 안 돔. 선행 미완료 하위 작업 '승인' → '승인 대기' 로 되돌려짐
+4. keep 티켓 '승인' → 진행 중 → **Draft** PR → 검토 중, pr-review 코멘트에 AC 대조 표. CI 에 skip 검사 통과. manual 티켓 '승인' → 안 돔. 선행 미완료 하위 작업 '승인' → '승인 대기' 로 되돌려짐
 5. 테스트 PR 머지 → 완료, 마지막 하위 작업 머지 → 부모 완료
 6. 테스트 티켓·브랜치·PR 정리
 

@@ -33,7 +33,7 @@
 🔒2 승인 ─┬ keep  → 곧바로 구현 (게이트 3 을 겸한다)
           └ split → 하위 작업 생성(각각 승인 대기), 부모는 진행 중
 🔒3 하위 작업 승인 ─(jira-executor)─▶ 진행 중 ─▶ Draft PR ─▶ 검토 중
-       └ 기계 게이트: CI build · 아키텍처 규칙 · skip 0 · 비밀정보 스캔 / pr-review: 결함 유형 + AC 대조
+       └ 기계 게이트: CI build · 아키텍처 규칙 · skip 0 (비밀정보는 GitHub push protection) / pr-review: 결함 유형 + AC 대조
 🔒4 Draft → Ready: 코드를 읽고 설명할 수 있을 때. 고칠 것은 @claude 로 요청
 🔒5 머지 (사람만) ─(jira-sync)─▶ 완료 ─▶ 볼트 코드 리딩 노트
 불명확·실패는 어느 단계든 ─▶ 질문 (답을 설명에 반영하고 다시 분석 요청 / 승인 대기)
