@@ -5,6 +5,7 @@
 이 프로젝트가 증명하려는 것: 결제·정산 정합성, 대규모 트래픽에서의 동시성 제어, 실시간 전파, 이벤트 기반 아키텍처, 운영(k8s·CI/CD).
 설계 전문은 [docs/design/공동구매_플랫폼_설계서.md](docs/design/공동구매_플랫폼_설계서.md), 주요 결정은 [docs/adr](docs/adr).
 **재개 계획(순서·범위·완료 기준·진행)은 [docs/plan.md](docs/plan.md)** 가 기준이다 (2026-09-28).
+Jira 자동화와 사람 게이트는 [docs/automation.md](docs/automation.md).
 
 ## 상태
 
