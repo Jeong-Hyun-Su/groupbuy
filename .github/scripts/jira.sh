@@ -65,9 +65,9 @@ case "$cmd" in
     ;;
 
   block)
-    # REST 의 inward/outward 는 이름과 반대로 읽히는 경우가 많다. 생성 후 이슈 화면에서 방향을 확인할 것
+    # 생성 요청에서는 inwardIssue 가 "blocks" 쪽이다. 반대로 넣으면 선행·후행이 뒤집힌다 (2026-09-28 SCRUM-33/34 로 확인)
     api POST "/issueLink" "$(jq -nc --arg a "$1" --arg b "$2" \
-      '{type:{name:"Blocks"}, outwardIssue:{key:$a}, inwardIssue:{key:$b}}')" >/dev/null
+      '{type:{name:"Blocks"}, inwardIssue:{key:$a}, outwardIssue:{key:$b}}')" >/dev/null
     ;;
 
   label)
