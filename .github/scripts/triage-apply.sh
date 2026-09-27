@@ -96,6 +96,9 @@ case "$mode" in
     fi
 
     n=$(jq '.subtasks | length' "$file")
+    # 트리아지가 직접 구현을 권고했으면 하위 작업에 manual 을 붙인다. 코멘트만 남기면 쪼개진 하위 작업이
+    # 권고를 잃고 승인 즉시 자동 구현된다. 자동으로 돌려도 되면 사람이 라벨을 뗀다
+    manual=$(jq -r '.manual_recommended // false' "$file")
     keys=()
     for i in $(seq 0 $((n - 1))); do
       jq -r --argjson i "$i" --arg parent "$key" '.subtasks[$i] |
@@ -105,6 +108,7 @@ case "$mode" in
       title="[$((i + 1))/$n] $(jq -r --argjson i "$i" '.subtasks[$i].title' "$file")"
       k=$(jira subtask "$key" "$title" "$tmp/st$i.txt")
       keys+=("$k")
+      if [ "$manual" = "true" ]; then jira label "$k" manual >/dev/null; fi
       jira transition "$k" "승인 대기" >/dev/null
     done
 
@@ -118,6 +122,7 @@ case "$mode" in
 
     { echo "h3. 분해 승인 → 하위 작업 생성"
       echo "하나 = PR 하나. 선행이 머지된 뒤 각각 '승인' 으로 옮긴다."
+      if [ "$manual" = "true" ]; then echo "직접 구현 권고라 하위 작업에 라벨 {{manual}} 을 붙였다. 자동 구현해도 되는 것은 라벨을 뗀다."; fi
       for k in "${keys[@]}"; do echo "* $k"; done; } > "$tmp/split.txt"
     jira comment "$key" "$tmp/split.txt" >/dev/null
     jira unlabel "$key" split-proposed >/dev/null
