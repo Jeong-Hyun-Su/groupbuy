@@ -100,6 +100,8 @@ Jira 티켓을 Claude 가 분석(그대로 / 분해 / 질문)하고, 사람이 �
 | 시크릿 `JIRA_EMAIL`·`JIRA_API_TOKEN` (scope 없는 API 토큰) | ✅ PR #5 에서 jira-sync·pr-review 가 실제 인증 |
 | 워크플로 반영 | ✅ PR #5 머지, jira-sync 가 SCRUM-29 를 완료로 옮김 |
 | Secret scanning·Push protection | ✅ 켜져 있음 |
+| `SLACK_WEBHOOK` 시크릿 (executor 결과 알림) | ✅ 2026-09-28, 시험 메시지 200 |
+| Jira 토큰을 셸 단계에만 (PR #10) | ✅ SCRUM-31 재승인으로 가드·건너뜀 기록 단계가 토큰으로 Jira 를 읽고 쓰는 것, Claude 단계는 건너뛴 것 확인 |
 | 라벨 `manual` (24·25·26·11·16) | ✅ |
 | Jira Automation A1·A2 + GitHub fine-grained PAT | ✅ A1·A2 모두 상태 전환만으로 동작 확인 |
 | 테스트 티켓으로 확인 절차 | ✅ 2026-09-28, 아래 "확인 결과" |
@@ -138,6 +140,7 @@ PAT 는 fine-grained, 이 저장소만, Contents: Read and write, 만료일 설�
 | question | SCRUM-32 | A1 → 트리아지가 모호한 점 4개를 질문으로 남기고 `질문` |
 | split | SCRUM-31 | 인수 조건 10개·하위 작업 5개 제안, 이 단계에서는 하위 작업 없음. 승인 → A2 → SCRUM-33~37 생성, 부모 `진행 중` + `split` |
 | keep | SCRUM-30 | 인수 조건 4개 → 승인 → A2 → Claude 가 README 한 줄 수정, **Draft PR #8** (권한 거부 0, 13턴). 사람이 Ready → 머지 |
+| 분해된 부모 재승인 | SCRUM-31 | `split` 라벨을 보고 구현하지 않고 코멘트만 남긴 뒤 종료 (Claude 미실행) |
 | 실패 경로 | SCRUM-30·31 | 턴 초과(트리아지 15턴)·편집 권한 없음(executor) 모두 Jira 코멘트 + `질문` 으로 돌아왔다 |
 
 ## 알려진 동작과 함정
