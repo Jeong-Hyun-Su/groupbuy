@@ -140,7 +140,7 @@ PR 이 얼마나 위험한지 **파일 경로로만**(셸) 매긴다. 트리아�
 | Jira Automation A1·A2 + GitHub fine-grained PAT | ✅ A1·A2 모두 상태 전환만으로 동작 확인 |
 | 테스트 티켓으로 확인 절차 | ✅ 2026-09-28, 아래 "확인 결과" |
 | GitHub 라벨 `risk:low`·`risk:medium`·`risk:high`·`risk:critical` | ✅ 2026-09-28 생성 |
-| pr-review 의 "리스크 라벨" 스텝 | ⏳ 사람이 반영 (초안은 PR 본문) |
+| pr-review 의 "리스크 라벨" 스텝 | ✅ 반영. 스크립트를 main 에서 받으므로 이 변경이 머지된 뒤 여는 PR 부터 동작한다 |
 
 ### Jira Automation 규칙
 

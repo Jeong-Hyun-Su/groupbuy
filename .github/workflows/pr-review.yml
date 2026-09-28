@@ -62,6 +62,26 @@ jobs:
               jq -r '.acceptance_criteria[] | "* " + .' .review/triage.json; } > .review/ac.md
           fi
 
+      # 파일 경로로 리스크 점수 → risk:* 라벨, 돈 경로인데 티켓이 manual 이 아니면 경고 코멘트 (docs/automation.md)
+      # jira.sh 와 같은 이유로 스크립트는 main 에서 받는다. 실패해도 리뷰는 계속한다
+      - name: 리스크 라벨
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          JIRA_BASE_URL: https://ikerhold1572.atlassian.net
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          D="$RUNNER_TEMP/risk"; mkdir -p "$D"
+          git fetch -q origin "$DEFAULT_BRANCH" || exit 0
+          for f in risk-score.sh jira.sh; do
+            git show "FETCH_HEAD:.github/scripts/$f" > "$D/$f" && chmod +x "$D/$f" || exit 0
+          done
+          "$D/risk-score.sh" "$PR" || echo "::warning::리스크 라벨 실패 — 리뷰는 계속한다"
+
+
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
