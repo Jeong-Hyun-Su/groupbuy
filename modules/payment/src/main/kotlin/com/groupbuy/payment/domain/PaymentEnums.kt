@@ -26,3 +26,4 @@ enum class RefundReason {
     USER_CANCEL,                   // 자진 취소
     DEAL_CLOSED_DURING_PAYMENT,    // 마감 직후 승인된 건 전액 취소 (ADR-07)
 }
+// risk-score 재라벨 확인용 — 머지하지 않는다
