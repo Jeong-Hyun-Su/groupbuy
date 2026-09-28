@@ -206,3 +206,4 @@ class DealTest {
         }
     }
 }
+// risk-score 동작 확인용 — 머지하지 않는다
