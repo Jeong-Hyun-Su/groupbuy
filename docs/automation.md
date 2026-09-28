@@ -38,7 +38,8 @@ Draft → Ready for review 전에 확인한다.
 - [ ] AC 대조 표에서 모든 AC 에 증명하는 테스트가 있다
 - [ ] PR 본문의 "확신이 없는 부분" 을 확인했다
 - [ ] 변경을 내 말로 설명할 수 있고, 볼트 코드 리딩 노트에 "왜 이렇게 했나" 를 한 줄 적었다
-- [ ] 돈 경로·불변식(R1~R8)을 건드렸다면 manual 로 돌렸어야 하지 않았는지 다시 본다
+- [ ] `risk:*` 라벨을 봤다. `risk:high` 이상이면 변경 파일을 전부 직접 읽는다
+- [ ] "돈 경로를 건드렸는데 manual 이 아니다" 경고 코멘트가 있으면, 설명할 수 없는 부분이 하나라도 있을 때 PR 을 닫고 티켓을 `manual` 로 돌린다
 
 ## Jira 상태
 
@@ -67,12 +68,13 @@ Draft → Ready for review 전에 확인한다.
 | `.github/workflows/jira-triage.yml` | `repository_dispatch: jira-triage` (A1) | 티켓을 Jira 에서 읽어 Claude(opus, Read·Glob·Grep·Write 만)가 `triage.json` 작성 → `triage-apply.sh propose` |
 | `.github/workflows/jira-executor.yml` | `repository_dispatch: jira-approved` (A2) | 잡 2개. `implement`: 가드(브랜치·manual·split·선행 작업) → `split-proposed` 면 하위 작업만 생성, 아니면 Claude(sonnet) 구현 → Draft PR, 질문은 아티팩트로. `report`: 새 러너에서 main 을 받아 Jira 에 결과(검토 중 / 질문 / 실패) + Slack |
 | `.github/workflows/jira-sync.yml` | PR opened·reopened·closed (이 저장소 브랜치만) | 브랜치 접두 `(feature\|fix\|chore)/SCRUM-N` 또는 제목 접두 `SCRUM-N:` → 검토 중(완료된 티켓은 그대로) / 머지 시 완료(+부모) / 머지 없이 닫히면 검토 중이던 티켓만 질문 |
-| `.github/workflows/pr-review.yml` | PR opened·synchronize (코드 변경) | 결함 유형 6가지 + Jira 인수 조건(AC) 번호별 테스트 대조 표 |
+| `.github/workflows/pr-review.yml` | PR opened·synchronize (코드 변경) | `risk-score.sh` 로 리스크 라벨 → 결함 유형 6가지 + Jira 인수 조건(AC) 번호별 테스트 대조 표 |
 | `.github/workflows/ci.yml` | push main, PR | `./gradlew build`, 아키텍처 규칙, skip 0 검사 |
 | `.github/workflows/claude-mention.yml` | 소유자의 `@claude` 코멘트 | PR 브랜치에 수정 커밋 (게이트 4 재작업 경로) |
 | `.github/scripts/jira.sh` | 워크플로 셸 스텝 | Jira REST v2 헬퍼: get·status·transition(이름으로)·comment·subtask·block·label·unlabel·attach·attachment |
 | `.github/scripts/triage-apply.sh` | triage·executor | `triage.json` 검증 → propose(코멘트·첨부·전이) / create(하위 작업·Blocks 링크) |
 | `.github/scripts/check-skipped.sh` | ci | JUnit 결과의 skip 합계가 0 이 아니면 실패 |
+| `.github/scripts/risk-score.sh` | pr-review | 변경 파일 경로로 리스크 점수 → `risk:*` 라벨, 돈 경로인데 티켓이 `manual` 이 아니면 경고 코멘트(PR 당 1회). `--dry-run` 은 출력만 |
 
 `triage.json` 형식 (Claude 가 쓰고 셸이 `jq` 로 검증, Jira 첨부로 보관):
 
@@ -90,6 +92,21 @@ Draft → Ready for review 전에 확인한다.
 }
 ```
 
+### 리스크 라벨
+
+PR 이 얼마나 위험한지 **파일 경로로만**(셸) 매긴다. 트리아지의 `manual_recommended` 는 구현 전에 티켓만 보고 판단하므로, 구현 결과가 돈 경로에 닿았는지를 게이트 4 에서 한 번 더 본다. 라벨은 신호일 뿐이고 자동 머지·차단은 없다.
+
+| 축 | 점수 | 판정 |
+|---|---|---|
+| 돈 경로·불변식 | 40 / 30 | `modules/(payment\|settlement)/src/main/` 40 (R4~R7), `modules/(participation\|deal)/src/main/**/(domain\|application)/` 30 (R1~R3·R8). 큰 값 하나 |
+| 마이그레이션 | 25 | `db/migration/*.sql` 변경 |
+| 스코프 | 0~20 | 문서(`.md`) 제외 변경 줄 ≤100: 0 · ≤300: 8 · ≤800: 14 · 초과: 20 |
+| 테스트 누락 | 15 | `src/main/**.kt` 가 바뀌었는데 `src/test/` 변경이 없음 |
+
+`risk:low` 0~15 · `risk:medium` 16~35 · `risk:high` 36~60 · `risk:critical` 61~. Breaking change 축은 두지 않는다(외부 소비자 없음). 경로는 스크립트 맨 위 변수에 있다 — 모듈이 바뀌면 거기만 고친다. 문서만 바꾼 PR 은 pr-review 가 돌지 않아 라벨이 없다(= low).
+
+과거 PR 로 맞춰 본 값 (`risk-score.sh N --dry-run`, 2026-09-28): #1 돈 버그 3건 `high` 60 · #3 재개 준비(DealRepository 2줄) `medium` 30 · #4~#14 자동화·문서 `low` 0~14.
+
 ## 설계 원칙과 이유
 
 - **Claude 는 판단만, Jira 쓰기는 셸.** Jira 토큰이 Claude 에게 닿지 않게 네 겹으로 막는다
@@ -105,7 +122,7 @@ Draft → Ready for review 전에 확인한다.
 - **REST v2.** v3 는 코멘트 본문이 ADF JSON 이라 셸에서 다루기 번거롭다. 상태는 id 가 아니라 이름으로 전이를 찾는다
 - **비밀정보 검사는 GitHub 기본 Secret scanning·Push protection.** 새어 나갈 수 있는 값이 전부 형식이 알려진 토큰이라 gitleaks 는 중복
 
-하지 않은 것 (규모에 비해 과함): 레포별 PRD·도메인→레포 라우팅(레포 1개), RAG·코드그래프·벡터 DB, git worktree(Actions 러너가 격리), 자동 재구현 루프(사람이 모르는 사이 코드가 바뀌면 게이트 4 가 무의미), 평가 결과 별도 채점 파일.
+하지 않은 것 (규모에 비해 과함): 레포별 PRD·도메인→레포 라우팅(레포 1개), RAG·코드그래프·벡터 DB, git worktree(Actions 러너가 격리), 자동 재구현 루프(사람이 모르는 사이 코드가 바뀌면 게이트 4 가 무의미), 평가 결과 별도 채점 파일, 리스크 기반 auto-merge(머지는 항상 사람), 점수별 리뷰 라우팅·멀티 에이전트·다른 모델 2차 리뷰(구독 한도를 로컬과 나눠 쓴다. 필요하면 게이트 4 에서 로컬로 직접 돌린다).
 
 ## 설정 현황 (2026-09-28)
 
@@ -122,6 +139,8 @@ Draft → Ready for review 전에 확인한다.
 | 라벨 `manual` (24·25·26·11·16) | ✅ |
 | Jira Automation A1·A2 + GitHub fine-grained PAT | ✅ A1·A2 모두 상태 전환만으로 동작 확인 |
 | 테스트 티켓으로 확인 절차 | ✅ 2026-09-28, 아래 "확인 결과" |
+| GitHub 라벨 `risk:low`·`risk:medium`·`risk:high`·`risk:critical` | ✅ 2026-09-28 생성 |
+| pr-review 의 "리스크 라벨" 스텝 | ⏳ 사람이 반영 (초안은 PR 본문) |
 
 ### Jira Automation 규칙
 
