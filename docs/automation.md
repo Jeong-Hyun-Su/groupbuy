@@ -181,3 +181,4 @@ PAT 는 fine-grained, 이 저장소만, Contents: Read and write, 만료일 설�
 - **Blocks 링크 생성 요청에서는 `inwardIssue` 가 막는 쪽**이다(조회 응답과 반대로 읽힌다). 처음에 거꾸로 만들어 PR #7 에서 고쳤다
 - executor·claude-mention 은 `--allowedTools` 에 `Edit,Write` 가 없으면 파일을 못 고치고, 권한 거부만 반복하다 PR 없이 끝난다 (PR #7)
 - Atlassian MCP 에는 이슈 삭제가 없다. 테스트 티켓은 완료로 닫거나 Jira 화면에서 지운다
+- **커밋·PR 에 Claude 공동 작성자 줄과 세션 링크를 넣지 않는다.** Actions 의 Claude 는 기본값으로 `Co-Authored-By: Claude … <noreply@anthropic.com>` 을 붙인다. 저장소 `.claude/settings.json` 의 `attribution` 을 빈 값으로 둬서 막는다(claude-code-action 이 프로젝트 설정을 읽는다). 로컬 세션은 `~/.claude/settings.json` 에 같은 값이 있다
