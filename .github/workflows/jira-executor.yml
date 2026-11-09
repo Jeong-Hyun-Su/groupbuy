@@ -225,7 +225,19 @@ jobs:
           if [ "$(gh pr view "$pr" --json isDraft -q .isDraft)" != "true" ]; then
             gh pr ready "$pr" --undo
           fi
-          printf 'h3. Claude 자동 구현: Draft PR\n%s\n\n읽고 설명할 수 있으면 Ready for review 로 바꾸고 머지한다.\n' "$pr" > /tmp/pr.txt
+
+          # 승인 기록: 누가 언제 승인했고 어느 분석을 보고 했는지. 변경 이력에서 읽는다 (실패해도 흐름은 막지 않는다)
+          approval=$(.github/scripts/jira.sh approval "$KEY" 2>/dev/null || true)
+          if [ -n "$approval" ]; then
+            body=$(gh pr view "$pr" --json body -q .body)
+            if ! grep -q '^## 승인 기록' <<<"$body"; then
+              { printf '%s\n\n## 승인 기록\n' "$body"; sed 's/^/- /' <<<"$approval"; printf -- '- 티켓: %s/browse/%s\n' "$JIRA_BASE_URL" "$KEY"; } > /tmp/pr-body.md
+              gh pr edit "$pr" --body-file /tmp/pr-body.md || true
+            fi
+          fi
+          { printf 'h3. Claude 자동 구현: Draft PR\n%s\n\n' "$pr"
+            [ -z "$approval" ] || printf '*승인 기록*\n%s\n\n' "$(sed 's/^/* /' <<<"$approval")"
+            printf '읽고 설명할 수 있으면 Ready for review 로 바꾸고 머지한다.\n'; } > /tmp/pr.txt
           .github/scripts/jira.sh comment "$KEY" /tmp/pr.txt
           .github/scripts/jira.sh transition "$KEY" "검토 중"
           echo "status=pr $pr" >> "$GITHUB_OUTPUT"
