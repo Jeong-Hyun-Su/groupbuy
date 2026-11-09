@@ -10,6 +10,7 @@
 #   jira.sh label KEY LABEL             라벨 추가
 #   jira.sh unlabel KEY LABEL           라벨 제거
 #   jira.sh attach KEY FILE             첨부파일 올리기
+#   jira.sh approval KEY                마지막 '승인' 전이의 승인자·시각과 트리아지 코멘트 링크 (3줄)
 #   jira.sh attachment KEY NAME OUT     이름이 NAME 인 첨부 중 가장 최근 것을 OUT 으로 받기
 #
 # 환경변수: JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
@@ -92,6 +93,16 @@ case "$cmd" in
       exit 1
     fi
     curl -sS --fail -L -u "$JIRA_EMAIL:$JIRA_API_TOKEN" -o "$3" "$url"
+    ;;
+
+  approval)
+    # 변경 이력에서 가장 최근에 '승인' 으로 옮긴 사람을 찾는다. 승인 규칙(A2)을 고치지 않아도 된다
+    api GET "/issue/$1?expand=changelog&fields=comment" | jq -r --arg base "$JIRA_BASE_URL" --arg k "$1" '
+      ([.changelog.histories[]? | select(any(.items[]; .field == "status" and .toString == "승인"))] | sort_by(.created) | last) as $h
+      | ([.fields.comment.comments[]? | select(.body | startswith("h3. Claude 트리아지"))] | last) as $c
+      | "승인자: " + ($h.author.displayName // "알 수 없음"),
+        "승인 시각: " + (($h.created // "-")[0:16] | sub("T"; " ")),
+        "분석 코멘트: " + (if $c then $base + "/browse/" + $k + "?focusedCommentId=" + $c.id else "- (이 티켓에는 없음. 하위 작업이면 부모 티켓 참고)" end)'
     ;;
 
   *)
