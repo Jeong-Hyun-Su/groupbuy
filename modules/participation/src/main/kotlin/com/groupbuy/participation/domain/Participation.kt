@@ -136,12 +136,12 @@ class Participation private constructor(
     }
 
     /** 만료·취소된 자리를 같은 사용자가 새 주문으로 다시 선점. EXPIRED | CANCELLED → RESERVED */
-    fun reserveAgain(orderId: Long, now: Instant, ttl: Duration) {
+    fun reserveAgain(orderId: Long, now: Instant, ttl: Duration, closeAt: Instant) {
         requirePositive(ttl)
         transition(from = setOf(ParticipationStatus.EXPIRED, ParticipationStatus.CANCELLED), to = ParticipationStatus.RESERVED)
         this.orderId = orderId
         reservedAt = now
-        reservationExpiresAt = now.plus(ttl)
+        reservationExpiresAt = expiryOf(now, ttl, closeAt)
         confirmedAt = null
         registerEvent(ParticipationReserved(dealId = dealId, userId = userId, occurredAt = now))
     }
@@ -155,11 +155,17 @@ class Participation private constructor(
 
     companion object {
         /** 자리 선점. 정원·중복 검사는 호출자(application) 가 딜 잠금 아래에서 끝낸 뒤 호출한다 */
-        fun reserve(dealId: Long, userId: Long, orderId: Long, now: Instant, ttl: Duration): Participation {
+        fun reserve(dealId: Long, userId: Long, orderId: Long, now: Instant, ttl: Duration, closeAt: Instant): Participation {
             requirePositive(ttl)
-            return Participation(dealId, userId, orderId, now, now.plus(ttl)).apply {
+            return Participation(dealId, userId, orderId, now, expiryOf(now, ttl, closeAt)).apply {
                 registerEvent(ParticipationReserved(dealId = dealId, userId = userId, occurredAt = now))
             }
+        }
+
+        /** 설계서 2.5: 선점 만료 = min(선점 시각 + TTL, 딜 마감 시각) */
+        private fun expiryOf(now: Instant, ttl: Duration, closeAt: Instant): Instant {
+            val byTtl = now.plus(ttl)
+            return if (byTtl.isAfter(closeAt)) closeAt else byTtl
         }
 
         private fun requirePositive(ttl: Duration) {

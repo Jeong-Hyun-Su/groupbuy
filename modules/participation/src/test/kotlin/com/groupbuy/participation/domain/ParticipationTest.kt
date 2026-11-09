@@ -19,8 +19,10 @@ class ParticipationTest {
     private val now: Instant = Instant.parse("2026-09-20T02:00:00Z")
     private val ttl: Duration = Duration.ofMinutes(10)
 
+    private val closeAt: Instant = now.plus(Duration.ofDays(2))
+
     private fun reserved(id: Long? = 1L): Participation =
-        Participation.reserve(dealId = 1, userId = 42, orderId = 100, now = now, ttl = ttl)
+        Participation.reserve(dealId = 1, userId = 42, orderId = 100, now = now, ttl = ttl, closeAt = closeAt)
             .also { if (id != null) ReflectionTestUtils.setField(it, "id", id) }
 
     private fun confirmed(): Participation = reserved().apply { confirm(now.plusSeconds(60)); pollEvents() }
@@ -41,8 +43,28 @@ class ParticipationTest {
 
         @Test
         fun `TTL 은 양수여야 한다`() {
-            assertThatThrownBy { Participation.reserve(1, 1, 1, now, Duration.ZERO) }
+            assertThatThrownBy { Participation.reserve(1, 1, 1, now, Duration.ZERO, closeAt) }
                 .isInstanceOf(IllegalArgumentException::class.java)
+        }
+
+        @Test
+        fun `마감 3분 전에 선점하면 만료 시각은 마감 시각이다`() {
+            val closeSoon = now.plus(Duration.ofMinutes(3))
+
+            val p = Participation.reserve(dealId = 1, userId = 42, orderId = 100, now = now, ttl = ttl, closeAt = closeSoon)
+
+            assertThat(p.reservationExpiresAt).isEqualTo(closeSoon)
+        }
+
+        @Test
+        fun `재선점도 만료 시각이 마감 시각을 넘지 않는다`() {
+            val p = reserved().apply { expire(now.plus(ttl)); pollEvents() }
+            val later = now.plus(ttl).plusSeconds(30)
+            val closeSoon = later.plus(Duration.ofMinutes(3))
+
+            p.reserveAgain(orderId = 200, now = later, ttl = ttl, closeAt = closeSoon)
+
+            assertThat(p.reservationExpiresAt).isEqualTo(closeSoon)
         }
 
         @Test
@@ -109,7 +131,7 @@ class ParticipationTest {
             val p = reserved().apply { expire(now.plus(ttl)); pollEvents() }
             val later = now.plus(ttl).plusSeconds(30)
 
-            p.reserveAgain(orderId = 200, now = later, ttl = ttl)
+            p.reserveAgain(orderId = 200, now = later, ttl = ttl, closeAt = closeAt)
 
             assertThat(p.status).isEqualTo(ParticipationStatus.RESERVED)
             assertThat(p.orderId).isEqualTo(200)
@@ -123,7 +145,7 @@ class ParticipationTest {
         fun `살아있는 선점이나 확정 참여는 다시 선점할 수 없다 (R2)`() {
             assertThat(reserved().canReserveAgain).isFalse()
             assertThat(confirmed().canReserveAgain).isFalse()
-            assertThatThrownBy { confirmed().reserveAgain(200, now, ttl) }
+            assertThatThrownBy { confirmed().reserveAgain(200, now, ttl, closeAt) }
                 .isInstanceOf(InvalidStateTransitionException::class.java)
         }
     }

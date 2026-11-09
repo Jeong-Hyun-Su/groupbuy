@@ -59,9 +59,9 @@ class ParticipationCommandService(
         val ttl = properties.reservationTtl
 
         val participation = if (existing == null) {
-            participationRepository.save(Participation.reserve(dealId, userId, orderId, now, ttl))
+            participationRepository.save(Participation.reserve(dealId, userId, orderId, now, ttl, deal.closeAt))
         } else {
-            existing.apply { reserveAgain(orderId, now, ttl) }
+            existing.apply { reserveAgain(orderId, now, ttl, deal.closeAt) }
         }
 
         return ParticipateResult(

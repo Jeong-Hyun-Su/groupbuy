@@ -50,6 +50,16 @@ class ParticipationCommandServiceTest {
     }
 
     @Test
+    fun `마감 3분 전 선점의 응답 만료 시각은 마감 시각을 넘지 않는다`() {
+        val deal = openDeal()
+        time.set(close.minus(Duration.ofMinutes(3)))
+
+        val result = service.participate(dealId = deal.id!!, userId = 42)
+
+        assertThat(result.reservationExpiresAt).isEqualTo(close)
+    }
+
+    @Test
     fun `선점에 성공하면 정가 주문과 RESERVED 참여가 생기고 결제 파라미터를 돌려준다`() {
         val deal = openDeal()
 
