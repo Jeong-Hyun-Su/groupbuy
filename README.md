@@ -100,6 +100,14 @@ groupbuy/
 - [x] 사용자·판매자·상품 시드 데이터 (`infra/seed/seed.sql`, 사용자 5,000명 + LT-01 딜)
 - [ ] LT-01 실행 → `docs/loadtest/` 에 붕괴 지점 기록 → Phase 2 동기
 
+## 트러블슈팅 기록
+
+Phase 1 점검에서 찾아 고친 결함 (`docs/troubleshooting/`).
+
+1. [환불이 한 번 실패하면 딜이 영영 마감되지 않는다](docs/troubleshooting/01-closing-stuck.md)
+2. [PG 는 돈을 받았는데 DB 에는 결제 행이 없다](docs/troubleshooting/02-approved-but-rolled-back.md)
+3. [토스 웹훅에 대한 틀린 가정](docs/troubleshooting/03-toss-webhook-assumptions.md)
+
 ## 설계 핵심 (요약)
 
 - 할인율은 **마감 시점 최종 인원**으로만 확정한다. 참여 시점 할인율은 예상값이다 (ADR-002)
