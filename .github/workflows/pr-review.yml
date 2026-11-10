@@ -85,6 +85,9 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # 자동 구현 PR 은 claude 봇이 연다. 허용하지 않으면 "Workflow initiated by non-human actor" 로 리뷰 단계가 실패한다 (2026-11-09, PR #21).
+          # '*' 가 아니라 이 봇만 허용한다 — 이 단계는 OAuth 토큰과 PR 쓰기 권한을 든다
+          allowed_bots: 'claude'
           # Bash 는 기본으로 막혀 있다. 허용하지 않으면 diff 를 못 읽고 코멘트도 못 남긴 채 "성공"한다 (2026-09-28, SCRUM-29)
           claude_args: >-
             --max-turns 20 --model sonnet
